@@ -1,13 +1,14 @@
 ![Ubuntu 24.04](https://img.shields.io/badge/Ubuntu-24.04-orange)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/bivlked/amneziawg-installer/blob/main/LICENSE)
 ![Status](https://img.shields.io/badge/Status-Stable-success)
-[![Version](https://img.shields.io/badge/Installer_Version-4.0-blue)](https://github.com/bivlked/amneziawg-installer/releases) 
- 
-<h1 align="center">Автоматическая установка и управление AmneziaWG</h1>
+[![Version](https://img.shields.io/badge/Installer_Version-5.0-blue)](https://github.com/bivlked/amneziawg-installer/releases)
+![AWG 2.0](https://img.shields.io/badge/AmneziaWG-2.0-blueviolet)
+
+<h1 align="center">Автоматическая установка и управление AmneziaWG 2.0</h1>
 
 <p align="center">
   Набор Bash-скриптов для быстрой, безопасной и удобной установки,<br>
-  настройки и управления VPN-сервером <strong>AmneziaWG</strong> на <strong>Ubuntu 24.04 LTS Minimal</strong>.
+  настройки и управления VPN-сервером <strong>AmneziaWG 2.0</strong> на <strong>Ubuntu 24.04 LTS Minimal</strong>.
 </p>
 
 <p align="center">
@@ -16,6 +17,7 @@
   <a href="#recomend-hosting">Хостинг</a> •
   <a href="#ustanovka">Установка</a> •
   <a href="#upravlenie">Управление</a> •
+  <a href="#migratsiya">Миграция с v4</a> •
   <a href="#dopolnitelno">Дополнительно</a> •
   <a href="#faq-main">FAQ</a> •
   <a href="#licenziya">Лицензия</a>
@@ -26,14 +28,16 @@
 <a id="vozmozhnosti"></a>
 ## ✨ Возможности
 
-* 🚀 **Автоматическая установка:** Полная настройка сервера с минимальным вмешательством.
+* 🚀 **AmneziaWG 2.0:** Полная поддержка протокола AWG 2.0 с параметрами обфускации H1-H4 (диапазоны), S1-S4, CPS (I1).
+* 🔧 **Нативная генерация:** Все ключи и конфиги генерируются средствами Bash + `awg` без внешних зависимостей (Python/awgcfg.py убраны).
+* 🧹 **Оптимизация сервера:** Автоматическая очистка ненужных пакетов (snapd, modemmanager и др.), hardware-aware оптимизация (swap, NIC, sysctl).
 * 🔄 **Возобновляемость:** Установку можно безопасно прерывать (для перезагрузок) и возобновлять.
-* 🔒 **Безопасность по умолчанию:** Настройка фаервола `UFW` с лимитами SSH, отключение IPv6 (опц.), безопасные права доступа, Harden sysctl, авто-установка Fail2Ban.
+* 🔒 **Безопасность по умолчанию:** UFW с лимитами SSH, отключение IPv6 (опц.), безопасные права доступа, Harden sysctl, Fail2Ban.
 * ⚙️ **Надежность:** Установка через DKMS, проверка зависимостей и статуса модуля ядра.
-* 🔧 **Гибкость:** Выбор порта, подсети, режима IPv6 и маршрутизации (`AllowedIPs`) при установке.
-* 🧑‍💻 **Управление:** Удобный скрипт `manage_amneziawg.sh` для работы с клиентами и сервером (скачивается автоматически).
-* 🩺 **Диагностика:** Создание подробного отчета (`--diagnostic`).
-* 🗑️ **Деинсталляция:** Полное удаление установленных компонентов (`--uninstall`).
+* 🎛️ **Гибкость:** Выбор порта, подсети, режима IPv6 и маршрутизации при установке. Поддержка `--endpoint` для серверов за NAT.
+* 🧑‍💻 **Управление:** Удобный скрипт `manage_amneziawg.sh` для работы с клиентами и сервером.
+* 🩺 **Диагностика:** Подробный отчет с AWG 2.0 параметрами (`--diagnostic`).
+* 🗑️ **Деинсталляция:** Полное удаление (`--uninstall`).
 * 📝 **Логирование:** Запись всех действий в лог-файлы в `/root/awg/`.
 
 ---
@@ -46,6 +50,7 @@
 * **Интернет:** Стабильное подключение.
 * **Ресурсы:** ~1 ГБ ОЗУ (рекомендуется 2+ ГБ), ~3 ГБ диска.
 * **SSH:** Доступ по SSH.
+* **Клиент:** Amnezia VPN **>= 4.8.12.7** с поддержкой AWG 2.0.
     > ⚠️ **ВАЖНО:** Если используется **нестандартный порт SSH** (отличный от 22), **ОБЯЗАТЕЛЬНО** добавьте правило `sudo ufw allow ВАШ_ПОРТ/tcp` **ДО** запуска скрипта установки!
 
 ---
@@ -95,7 +100,8 @@
     * **Подсеть туннеля:** Внутренняя сеть для VPN. По умолчанию: `10.9.9.1/24`.
     * **Отключение IPv6:** Рекомендуется отключить (`Y`) для избежания утечек трафика.
     * **Режим маршрутизации:** Определяет, какой трафик пойдет через VPN. По умолчанию `2` (Список Amnezia+DNS) - рекомендуется для лучшей совместимости и обхода блокировок.
-    Нажмите `Enter` для выбора значений по умолчанию. Настройки сохранятся в `/root/awg/awgsetup_cfg.init`.
+
+    Параметры AWG 2.0 (Jc, S1-S4, H1-H4, I1) генерируются **автоматически** — никаких действий не требуется.
 
 6.  **Перезагрузки:** Потребуется **ДВЕ** перезагрузки. Скрипт запросит подтверждение `[y/N]`. Введите `y` и нажмите Enter.
 
@@ -106,7 +112,7 @@
     Скрипт автоматически продолжит с нужного шага **без повторных запросов**.
 
 8.  **Завершение:** После второй перезагрузки и третьего запуска скрипта вы увидите сообщение:
-    `Установка и настройка AmneziaWG УСПЕШНО ЗАВЕРШЕНА!`
+    `Установка и настройка AmneziaWG 2.0 УСПЕШНО ЗАВЕРШЕНА!`
 
 **Расположение файлов:**
 
@@ -114,6 +120,7 @@
 * Конфигурация сервера: `/etc/amnezia/amneziawg/awg0.conf`
 * Файл настроек скрипта: `/root/awg/awgsetup_cfg.init`
 * Скрипт управления: `/root/awg/manage_amneziawg.sh`
+* Общие функции: `/root/awg/awg_common.sh`
 
 ---
 
@@ -146,10 +153,37 @@ sudo bash /root/awg/manage_amneziawg.sh <команда> [аргументы]
 
 ---
 
+<a id="migratsiya"></a>
+## 🔄 Миграция с v4.0
+
+> **v5.0 — это breaking change.** Протокол AWG 2.0 **несовместим** с AWG 1.x. Все клиенты должны обновить конфигурацию.
+
+**Порядок миграции:**
+
+1. **Бэкап:** `sudo bash /root/awg/manage_amneziawg.sh backup`
+2. **Деинсталляция v4:** `sudo bash ./install_amneziawg.sh --uninstall`
+3. **Установка v5.0:** скачайте новый скрипт и установите (см. [Установка](#ustanovka))
+4. **Добавьте клиентов:** `sudo bash /root/awg/manage_amneziawg.sh add <имя>`
+5. **Обновите клиенты:** установите Amnezia VPN **>= 4.8.12.7** и импортируйте новые `.conf`
+
+**Что изменилось:**
+
+| | v4.0 (AWG 1.x) | v5.0 (AWG 2.0) |
+|---|---|---|
+| Протокол | AWG 1.x (H1-H4 фиксированные) | AWG 2.0 (H1-H4 диапазоны, S3-S4, CPS I1) |
+| Генерация конфигов | Python + awgcfg.py | Нативный Bash + `awg genkey/pubkey` |
+| Зависимости | Python 3 + venv | Только Bash + qrencode |
+| Оптимизация сервера | Нет | Cleanup + hardware-aware tuning |
+| Архитектура скриптов | 2 файла | 3 файла (+ awg_common.sh) |
+
+Предыдущая версия доступна в ветке [`legacy/v4`](https://github.com/bivlked/amneziawg-installer/tree/legacy/v4).
+
+---
+
 <a id="dopolnitelno"></a>
 ## ℹ️ Дополнительная информация
 
-Более подробную информацию о деталях конфигурации, настройках безопасности, дополнительных командах управления, технических деталях и ответах на другие вопросы вы можете найти в файле **[ADVANCED.md](ADVANCED.md)**.
+Более подробную информацию о деталях конфигурации, настройках безопасности, параметрах AWG 2.0, дополнительных командах управления, технических деталях и ответах на другие вопросы вы можете найти в файле **[ADVANCED.md](ADVANCED.md)**.
 
 ---
 
@@ -168,7 +202,12 @@ sudo bash /root/awg/manage_amneziawg.sh <команда> [аргументы]
 
 <details>
   <summary><strong>В: Клиенты не подключаются, что делать?</strong></summary>
-  **О:** 1. Проверьте статус: `sudo bash /root/awg/manage_amneziawg.sh check`. 2. Проверьте фаервол: `sudo ufw status verbose`. 3. Проверьте конфиг клиента. 4. Проверьте логи: `sudo journalctl -u awg-quick@awg0 -n 50`.
+  **О:** 1. Проверьте статус: `sudo bash /root/awg/manage_amneziawg.sh check`. 2. Проверьте фаервол: `sudo ufw status verbose`. 3. Проверьте конфиг клиента. 4. Проверьте логи: `sudo journalctl -u awg-quick@awg0 -n 50`. 5. Убедитесь, что клиент Amnezia VPN версии **>= 4.8.12.7**.
+</details>
+
+<details>
+  <summary><strong>В: Можно ли использовать с AWG 1.x клиентами?</strong></summary>
+  **О:** Нет. AWG 2.0 несовместим с AWG 1.x. Все клиенты должны поддерживать протокол 2.0. Для AWG 1.x используйте ветку <a href="https://github.com/bivlked/amneziawg-installer/tree/legacy/v4">legacy/v4</a>.
 </details>
 
 > Больше ответов и решений см. в **[ADVANCED.md](ADVANCED.md)**.
@@ -179,7 +218,7 @@ sudo bash /root/awg/manage_amneziawg.sh <команда> [аргументы]
 
 1.  **Логи:** `/root/awg/install_amneziawg.log`, `/root/awg/manage_amneziawg.log`
 2.  **Статус сервиса:** `sudo systemctl status awg-quick@awg0`
-3.  **Статус WireGuard:** `sudo awg show`
+3.  **Статус AmneziaWG:** `sudo awg show`
 4.  **Статус UFW:** `sudo ufw status verbose`
 5.  **Диагностический отчет:** `sudo bash ./install_amneziawg.sh --diagnostic`
 
@@ -194,5 +233,5 @@ sudo bash /root/awg/manage_amneziawg.sh <команда> [аргументы]
 ---
 
 <p align="center">
-  <a href="#автоматическая-установка-и-управление-amneziawg">↑ К началу</a>
+  <a href="#автоматическая-установка-и-управление-amneziawg-20">↑ К началу</a>
 </p>
