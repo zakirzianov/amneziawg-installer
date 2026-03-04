@@ -341,39 +341,6 @@ rand_range() {
     echo $(( (random_val % range) + min ))
 }
 
-# Генерация 4 непересекающихся диапазонов H1-H4
-# Стратегия: 4 сектора в пространстве uint32
-generate_h_ranges() {
-    # Секторы:
-    #   H1: [100000 — 800000]
-    #   H2: [1000000 — 8000000]
-    #   H3: [10000000 — 80000000]
-    #   H4: [100000000 — 800000000]
-    local sectors_lo=(100000 1000000 10000000 100000000)
-    local sectors_hi=(800000 8000000 80000000 800000000)
-    local results=()
-    local i
-
-    for i in 0 1 2 3; do
-        local lo=${sectors_lo[$i]}
-        local hi=${sectors_hi[$i]}
-        local sector_range=$((hi - lo))
-        local start end span
-
-        start=$(( lo + $(rand_range 0 $((sector_range / 2))) ))
-        span=$(rand_range 10000 $((sector_range / 4)))
-        end=$((start + span))
-        if [[ $end -gt $hi ]]; then end=$hi; fi
-
-        results+=("${start}-${end}")
-    done
-
-    echo "${results[0]}"
-    echo "${results[1]}"
-    echo "${results[2]}"
-    echo "${results[3]}"
-}
-
 # Генерация CPS строки для I1
 # Формат: "<r N>" где N — количество случайных байт (32-256)
 generate_cps_i1() {
@@ -401,13 +368,12 @@ generate_awg_params() {
     AWG_S3=$(rand_range 8 55)
     AWG_S4=$(rand_range 4 27)
 
-    # H1-H4: непересекающиеся диапазоны
-    local h_ranges
-    h_ranges=$(generate_h_ranges)
-    AWG_H1=$(echo "$h_ranges" | sed -n '1p')
-    AWG_H2=$(echo "$h_ranges" | sed -n '2p')
-    AWG_H3=$(echo "$h_ranges" | sed -n '3p')
-    AWG_H4=$(echo "$h_ranges" | sed -n '4p')
+    # H1-H4: непересекающиеся диапазоны (4 сектора в uint32)
+    # AWG сам выбирает случайное значение из range при каждом handshake
+    AWG_H1="100000-800000"
+    AWG_H2="1000000-8000000"
+    AWG_H3="10000000-80000000"
+    AWG_H4="100000000-800000000"
 
     # I1: CPS concealment
     AWG_I1=$(generate_cps_i1)
