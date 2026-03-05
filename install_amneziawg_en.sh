@@ -9,7 +9,7 @@ fi
 # AmneziaWG 2.0 installation and configuration script for Ubuntu 24.04 LTS Minimal
 # Author: @bivlked
 # Version: 5.5.1
-# Date: 2026-03-02
+# Date: 2026-03-05
 # Repository: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 

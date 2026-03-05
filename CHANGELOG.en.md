@@ -10,6 +10,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.5.1] — 2026-03-05
+
+### Fixed
+
+- **read -r:** Added `-r` flag to all `read -p` calls (15 places) — prevents `\` from being interpreted as an escape character in user input.
+- **curl timeout:** Added `--max-time 60 --retry 2` to script downloads during installation — prevents indefinite hanging on network issues.
+- **subnet validation:** Subnet validation now checks each octet ≤ 255 — previously accepted addresses like `999.999.999.999/24`.
+- **chmod checks:** Added error checking for `chmod 600` when setting permissions on key files.
+- **pipe subshell:** Fixed variable loss in config regeneration loop due to pipe subshell — replaced with here-string.
+- **port grep:** Improved port matching precision in `ss -lunp` — replaced `grep ":PORT "` with `grep -P ":PORT\s"` to avoid false matches.
+- **sed → bash:** Replaced `sed 's/%/%%/g'` with `${msg//%/%%}` — removed 2 unnecessary subprocesses per log call.
+- **cleanup trap:** Added `trap EXIT` for automatic cleanup of installer temp files.
+
+---
+
 ## [5.5] — 2026-03-02
 
 ### Fixed
