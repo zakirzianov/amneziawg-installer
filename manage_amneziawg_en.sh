@@ -712,6 +712,7 @@ cd "$AWG_DIR" || die "Failed to change to $AWG_DIR"
 if [[ -z "$COMMAND" ]]; then usage; fi
 
 log "Running command '$COMMAND'..."
+_cmd_rc=0
 
 case $COMMAND in
     add)
@@ -738,6 +739,7 @@ case $COMMAND in
             apply_config
         else
             log_error "Error adding client '$CLIENT_NAME'."
+            _cmd_rc=1
         fi
         ;;
 
@@ -759,15 +761,16 @@ case $COMMAND in
             apply_config
         else
             log_error "Error removing client '$CLIENT_NAME'."
+            _cmd_rc=1
         fi
         ;;
 
     list)
-        list_clients
+        list_clients || _cmd_rc=1
         ;;
 
     stats)
-        stats_clients
+        stats_clients || _cmd_rc=1
         ;;
 
     regen)
@@ -778,7 +781,7 @@ case $COMMAND in
             if ! grep -q "^#_Name = ${CLIENT_NAME}$" "$SERVER_CONF_FILE"; then
                 die "Client '$CLIENT_NAME' not found."
             fi
-            regenerate_client "$CLIENT_NAME" || log_error "Regeneration error '$CLIENT_NAME'."
+            regenerate_client "$CLIENT_NAME" || { log_error "Regeneration error '$CLIENT_NAME'."; _cmd_rc=1; }
         else
             # Regenerate all clients
             all_clients=$(grep '^#_Name = ' "$SERVER_CONF_FILE" | sed 's/^#_Name = //')
@@ -789,7 +792,7 @@ case $COMMAND in
                     cname="${cname## }"; cname="${cname%% }"
                     [[ -z "$cname" ]] && continue
                     log "Regenerating '$cname'..."
-                    regenerate_client "$cname" || log_warn "Regeneration error '$cname'"
+                    regenerate_client "$cname" || { log_warn "Regeneration error '$cname'"; _cmd_rc=1; }
                 done <<< "$all_clients"
                 log "Regeneration completed."
             fi
@@ -799,24 +802,24 @@ case $COMMAND in
     modify)
         [[ -z "$CLIENT_NAME" ]] && die "Client name not specified."
         validate_client_name "$CLIENT_NAME" || exit 1
-        modify_client "$CLIENT_NAME" "$PARAM" "$VALUE"
+        modify_client "$CLIENT_NAME" "$PARAM" "$VALUE" || _cmd_rc=1
         ;;
 
     backup)
-        backup_configs
+        backup_configs || _cmd_rc=1
         ;;
 
     restore)
-        restore_backup "$CLIENT_NAME" # CLIENT_NAME is used as [file]
+        restore_backup "$CLIENT_NAME" || _cmd_rc=1 # CLIENT_NAME is used as [file]
         ;;
 
     check|status)
-        check_server
+        check_server || _cmd_rc=1
         ;;
 
     show)
         log "AmneziaWG 2.0 status..."
-        if ! awg show; then log_error "awg show error."; fi
+        if ! awg show; then log_error "awg show error."; _cmd_rc=1; fi
         ;;
 
     restart)
@@ -838,9 +841,10 @@ case $COMMAND in
 
     *)
         log_error "Unknown command: '$COMMAND'"
+        _cmd_rc=1
         usage
         ;;
 esac
 
 log "Management script finished."
-exit 0
+exit $_cmd_rc

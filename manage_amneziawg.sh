@@ -712,6 +712,7 @@ cd "$AWG_DIR" || die "Ошибка перехода в $AWG_DIR"
 if [[ -z "$COMMAND" ]]; then usage; fi
 
 log "Запуск команды '$COMMAND'..."
+_cmd_rc=0
 
 case $COMMAND in
     add)
@@ -738,6 +739,7 @@ case $COMMAND in
             apply_config
         else
             log_error "Ошибка добавления клиента '$CLIENT_NAME'."
+            _cmd_rc=1
         fi
         ;;
 
@@ -759,15 +761,16 @@ case $COMMAND in
             apply_config
         else
             log_error "Ошибка удаления клиента '$CLIENT_NAME'."
+            _cmd_rc=1
         fi
         ;;
 
     list)
-        list_clients
+        list_clients || _cmd_rc=1
         ;;
 
     stats)
-        stats_clients
+        stats_clients || _cmd_rc=1
         ;;
 
     regen)
@@ -778,7 +781,7 @@ case $COMMAND in
             if ! grep -q "^#_Name = ${CLIENT_NAME}$" "$SERVER_CONF_FILE"; then
                 die "Клиент '$CLIENT_NAME' не найден."
             fi
-            regenerate_client "$CLIENT_NAME" || log_error "Ошибка перегенерации '$CLIENT_NAME'."
+            regenerate_client "$CLIENT_NAME" || { log_error "Ошибка перегенерации '$CLIENT_NAME'."; _cmd_rc=1; }
         else
             # Перегенерация всех клиентов
             all_clients=$(grep '^#_Name = ' "$SERVER_CONF_FILE" | sed 's/^#_Name = //')
@@ -789,7 +792,7 @@ case $COMMAND in
                     cname="${cname## }"; cname="${cname%% }"
                     [[ -z "$cname" ]] && continue
                     log "Перегенерация '$cname'..."
-                    regenerate_client "$cname" || log_warn "Ошибка перегенерации '$cname'"
+                    regenerate_client "$cname" || { log_warn "Ошибка перегенерации '$cname'"; _cmd_rc=1; }
                 done <<< "$all_clients"
                 log "Перегенерация завершена."
             fi
@@ -799,24 +802,24 @@ case $COMMAND in
     modify)
         [[ -z "$CLIENT_NAME" ]] && die "Не указано имя клиента."
         validate_client_name "$CLIENT_NAME" || exit 1
-        modify_client "$CLIENT_NAME" "$PARAM" "$VALUE"
+        modify_client "$CLIENT_NAME" "$PARAM" "$VALUE" || _cmd_rc=1
         ;;
 
     backup)
-        backup_configs
+        backup_configs || _cmd_rc=1
         ;;
 
     restore)
-        restore_backup "$CLIENT_NAME" # CLIENT_NAME используется как [файл]
+        restore_backup "$CLIENT_NAME" || _cmd_rc=1 # CLIENT_NAME используется как [файл]
         ;;
 
     check|status)
-        check_server
+        check_server || _cmd_rc=1
         ;;
 
     show)
         log "Статус AmneziaWG 2.0..."
-        if ! awg show; then log_error "Ошибка awg show."; fi
+        if ! awg show; then log_error "Ошибка awg show."; _cmd_rc=1; fi
         ;;
 
     restart)
@@ -838,9 +841,10 @@ case $COMMAND in
 
     *)
         log_error "Неизвестная команда: '$COMMAND'"
+        _cmd_rc=1
         usage
         ;;
 esac
 
 log "Скрипт управления завершил работу."
-exit 0
+exit $_cmd_rc
