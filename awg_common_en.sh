@@ -53,20 +53,6 @@ fi
 # Utilities
 # ==============================================================================
 
-# Generate random number in range [min, max]
-# Uses /dev/urandom to support large numbers (uint32)
-rand_range() {
-    local min=$1 max=$2
-    local range=$((max - min + 1))
-    local random_val
-    random_val=$(od -An -tu4 -N4 /dev/urandom | tr -d ' ')
-    if [[ -z "$random_val" || ! "$random_val" =~ ^[0-9]+$ ]]; then
-        # Fallback: combine two $RANDOM values for 30-bit range
-        random_val=$(( (RANDOM << 15) | RANDOM ))
-    fi
-    echo $(( (random_val % range) + min ))
-}
-
 # Detect primary network interface
 get_main_nic() {
     ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1); exit}'
