@@ -1161,7 +1161,7 @@ step2_install_amnezia() {
             if grep -q "^Types: deb$" "$sources_file"; then
                 log "Enabling deb-src..."
                 local bak
-                bak="${sources_file}.bak-$(date +%F_%T)"
+                bak="${sources_file}.bak-$(date +%F_%H%M%S)"
                 cp "$sources_file" "$bak" || log_warn "Backup error"
                 local tmp_sed
                 tmp_sed=$(mktemp)
@@ -1409,7 +1409,7 @@ step6_generate_configs() {
     # Backup existing server config BEFORE overwriting
     if [[ -f "$SERVER_CONF_FILE" ]]; then
         local s_bak
-        s_bak="${SERVER_CONF_FILE}.bak-$(date +%F_%T)"
+        s_bak="${SERVER_CONF_FILE}.bak-$(date +%F_%H%M%S)"
         cp "$SERVER_CONF_FILE" "$s_bak" || log_warn "Backup error $s_bak"
         log "Server config backup: $s_bak"
     fi

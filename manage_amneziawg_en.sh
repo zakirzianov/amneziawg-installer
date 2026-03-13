@@ -177,6 +177,7 @@ backup_configs() {
     log "Creating backup..."
     local bd="$AWG_DIR/backups"
     mkdir -p "$bd" || die "mkdir error $bd"
+    chmod 700 "$bd" 2>/dev/null
     local ts bf td
     ts=$(date +%F_%T)
     bf="$bd/awg_backup_${ts}.tar.gz"

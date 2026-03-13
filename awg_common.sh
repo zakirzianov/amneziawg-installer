@@ -937,4 +937,9 @@ CRONEOF
 remove_client_expiry() {
     local name="$1"
     rm -f "$EXPIRY_DIR/$name" 2>/dev/null
+    # Удаляем cron если больше нет клиентов с expiry
+    if [[ -d "$EXPIRY_DIR" ]] && [[ -z "$(ls -A "$EXPIRY_DIR" 2>/dev/null)" ]]; then
+        rm -f "$EXPIRY_CRON" 2>/dev/null
+        log_debug "Cron-задача expiry удалена (нет клиентов с expiry)."
+    fi
 }
