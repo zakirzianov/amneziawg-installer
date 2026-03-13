@@ -749,18 +749,15 @@ setup_fail2ban() {
         log_warn "Fail2Ban not installed, skipping."
         return 1
     fi
-    cat > /etc/fail2ban/jail.local << 'EOF' || { log_warn "jail.local write error"; return 1; }
-[DEFAULT]
-bantime  = 1h
-findtime = 10m
-maxretry = 5
-banaction = ufw
-
+    mkdir -p /etc/fail2ban/jail.d 2>/dev/null
+    cat > /etc/fail2ban/jail.d/amneziawg.conf << 'EOF' || { log_warn "jail.d/amneziawg.conf write error"; return 1; }
+# AmneziaWG — SSH protection (managed by amneziawg-installer)
 [sshd]
 enabled = true
 maxretry = 5
 findtime = 10m
 bantime  = 1h
+banaction = ufw
 EOF
     if systemctl restart fail2ban; then
         log "Fail2Ban configured and restarted."
@@ -956,8 +953,13 @@ step_uninstall() {
     rm -rf /etc/amnezia \
         /etc/modules-load.d/amneziawg.conf \
         /etc/sysctl.d/99-amneziawg-security.conf \
-        /etc/logrotate.d/amneziawg* \
-        /etc/fail2ban/jail.local || log_warn "File removal error."
+        /etc/logrotate.d/amneziawg* || log_warn "File removal error."
+    # Remove only our fail2ban artifacts
+    rm -f /etc/fail2ban/jail.d/amneziawg.conf 2>/dev/null
+    # Backward compatibility: remove jail.local if created by our installer
+    if [[ -f /etc/fail2ban/jail.local ]] && grep -q "banaction = ufw" /etc/fail2ban/jail.local 2>/dev/null; then
+        rm -f /etc/fail2ban/jail.local
+    fi
     log "Removing DKMS..."
     rm -rf /var/lib/dkms/amneziawg* || log_warn "DKMS removal error."
     log "Restoring sysctl..."
@@ -965,7 +967,6 @@ step_uninstall() {
         sed -i '/disable_ipv6/d' /etc/sysctl.conf || log_warn "sed sysctl.conf error"
     fi
     sysctl -p --system 2>/dev/null
-    rm -rf /etc/fail2ban/ 2>/dev/null || true
     rm -f /etc/apt/sources.list.d/*.bak-* "$AWG_DIR"/ubuntu.sources.bak-* 2>/dev/null || true
     log "Removing cron and scripts..."
     rm -f /etc/cron.d/*amneziawg* /etc/cron.d/awg-expiry /usr/local/bin/*amneziawg*.sh 2>/dev/null
