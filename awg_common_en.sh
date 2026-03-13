@@ -951,9 +951,9 @@ install_expiry_cron() {
         log_debug "Expiry cron job already installed."
         return 0
     fi
-    cat > "$EXPIRY_CRON" << 'CRONEOF'
+    cat > "$EXPIRY_CRON" << CRONEOF
 # AmneziaWG client expiry check — every 5 minutes
-*/5 * * * * root /bin/bash -c 'source /root/awg/awg_common.sh || exit 1; check_expired_clients' >> /root/awg/expiry.log 2>&1
+*/5 * * * * root /bin/bash -c 'source ${AWG_DIR}/awg_common.sh || exit 1; check_expired_clients' >> ${AWG_DIR}/expiry.log 2>&1
 CRONEOF
     chmod 644 "$EXPIRY_CRON"
     log "Expiry cron job installed: $EXPIRY_CRON"
