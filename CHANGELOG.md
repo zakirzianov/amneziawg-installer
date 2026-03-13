@@ -10,6 +10,37 @@
 
 ---
 
+## [5.6.0] — 2026-03-13
+
+### Добавлено
+
+- **stats:** Команда `stats` — статистика трафика по клиентам (format_bytes через awk).
+- **stats --json:** Машиночитаемый JSON-вывод для интеграции и мониторинга.
+- **--expires:** Флаг `--expires=ВРЕМЯ` для `add` — клиенты с ограниченным сроком действия (1h, 12h, 1d, 7d, 30d, 4w).
+- **Система истечения:** Авто-удаление клиентов через cron (`/etc/cron.d/awg-expiry`, проверка каждые 5 мин).
+- **vpn:// URI:** Генерация `.vpnuri` файлов для импорта в Amnezia Client (zlib-сжатие через Perl).
+- **Debian 12 (bookworm):** Полная поддержка — PPA через маппинг codename на focal.
+- **Debian 13 (trixie):** Полная поддержка — PPA через маппинг codename на noble, DEB822 формат.
+- **linux-headers fallback:** Авто-fallback на `linux-headers-$(dpkg --print-architecture)` для Debian.
+
+### Исправлено
+
+- **JSON sanitization:** Безопасная сериализация в JSON-выводе.
+- **Numeric quoting:** Числовые параметры AWG в кавычках для корректной обработки.
+- **O(n) stats:** Single-pass сбор статистики вместо множественных вызовов.
+- **backup filename:** `%F_%T` → `%F_%H%M%S` (убраны двоеточия из имени файла).
+- **cron auto-remove:** Очистка cron при удалении последнего expiry-клиента.
+- **backups perms:** `chmod 700` после `mkdir` для директории бэкапов.
+- **apt sources location:** Бэкап apt sources в `$AWG_DIR` вместо `sources.list.d`.
+- Множественные мелкие исправления по code review (19 фиксов).
+
+### Изменено
+
+- **Debian-aware installer:** Определение OS_ID, адаптивное поведение (cleanup, PPA, headers).
+- **Версия:** 5.5.1 → 5.6.0 во всех скриптах.
+
+---
+
 ## [5.5.1] — 2026-03-05
 
 ### Исправлено
