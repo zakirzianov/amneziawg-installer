@@ -25,6 +25,7 @@
 </p>
 
 <p align="center">
+  <a href="#quickstart">Quick Start</a> •
   <a href="#features">Features</a> •
   <a href="#requirements">Requirements</a> •
   <a href="#hosting-recommendation">Hosting</a> •
@@ -34,6 +35,17 @@
   <a href="#faq">FAQ</a> •
   <a href="#license">License</a>
 </p>
+
+<a id="quickstart"></a>
+## 🚀 Quick Start
+
+```bash
+wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
+chmod +x install_amneziawg.sh
+sudo bash ./install_amneziawg.sh
+```
+
+> 3 commands. 2 reboots. ~5 minutes. VPN ready. [Learn more →](#installation)
 
 ---
 
@@ -51,17 +63,23 @@
 * 🩺 **Diagnostics:** Detailed report with AWG 2.0 parameters (`--diagnostic`).
 * 🗑️ **Clean uninstall:** Full removal (`--uninstall`).
 * 📝 **Logging:** All actions logged to files in `/root/awg/`.
+* 📊 **Traffic statistics:** `stats` command with formatted output and `--json` for automation.
+* ⏳ **Temporary clients:** `--expires` to create clients with auto-removal on expiration (1h-30d).
+* 📱 **Quick import:** `vpn://` URI generation (`.vpnuri`) for one-tap import into Amnezia Client.
+* 🐧 **Debian support:** Full support for Debian 12 (bookworm) and 13 (trixie) alongside Ubuntu.
 
 ---
 
 <a id="requirements"></a>
 ## 🖥️ Requirements
 
-* **OS:** A **clean** installation of **Ubuntu Server 24.04 LTS Minimal**.
+* **OS:** A **clean** installation of **Ubuntu Server 24.04 LTS** / **Debian 12** / **Debian 13** Minimal.
 * **Access:** `root` privileges (via `sudo`).
 * **Internet:** Stable connection.
 * **Resources:** ~1 GB RAM (2+ GB recommended), minimum ~2 GB disk (3+ GB recommended).
 * **SSH:** SSH access to the server.
+
+> **Debian:** Minimal Debian installations do not include `curl` — install it with `apt-get install -y curl` before downloading the installer.
 
 **OS Compatibility:**
 
@@ -69,8 +87,8 @@
 |----|--------|-------|
 | Ubuntu 24.04 LTS | ✅ Fully supported | Recommended |
 | Ubuntu 25.10 | ⚠️ Experimental | May require building the kernel module from source |
-| Debian 12 (bookworm) | ✅ Supported | PPA via codename mapping to focal |
-| Debian 13 (trixie) | ⚠️ Experimental | PPA via codename mapping to noble |
+| Debian 12 (bookworm) | ✅ Supported | Tested. PPA via codename mapping to focal |
+| Debian 13 (trixie) | ✅ Supported | Tested. PPA via codename mapping to noble, DEB822 |
 
 * **Client:** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** with AWG 2.0 support.
     > ⚠️ **Do not confuse** with `amneziawg-windows-client` — that is a different project (standalone tunnel manager) that **does not support** AWG 2.0.
@@ -101,7 +119,7 @@ This configuration is more than enough for comfortable AmneziaWG operation with 
 
 This installation method ensures correct handling of interactive prompts and colored output in your terminal.
 
-1.  **Connect** to a **clean** Ubuntu 24.04 server via SSH.
+1.  **Connect** to a **clean** server (Ubuntu 24.04 / Debian 12 / Debian 13) via SSH.
     > **Tip:** After creating the server, wait 5-10 minutes for all background initialization processes to complete before starting the installation.
 
 2.  **Download the script:**
@@ -152,6 +170,8 @@ This installation method ensures correct handling of interactive prompts and col
 * Script settings file: `/root/awg/awgsetup_cfg.init`
 * Management script: `/root/awg/manage_amneziawg.sh`
 * Shared functions: `/root/awg/awg_common.sh`
+* vpn:// URI files: `/root/awg/*.vpnuri`
+* Client expiry data: `/root/awg/expiry/`
 
 ---
 
@@ -170,13 +190,14 @@ sudo bash /root/awg/manage_amneziawg.sh <command> [arguments]
 
 | Command   | Arguments              | Description                    | Restart? |
 | :-------- | :--------------------- | :----------------------------- | :------: |
-| `add`     | `<client_name>`        | Add a client                   |   **Yes** |
+| `add`     | `<name> [--expires=DUR]`  | Add a client (opt. with expiry) | **Yes** |
 | `remove`  | `<client_name>`        | Remove a client                |   **Yes** |
 | `list`    | `[-v]`                 | List clients (`-v` for details)|    No     |
 | `regen`   | `[client_name]`        | Regenerate files (all/one)     |    No     |
 | `modify`  | `<name> <param> <val>` | Modify a client parameter      |    No     |
 | `backup`  |                        | Create a backup                |    No     |
 | `restore` | `[file]`               | Restore from backup            |    No     |
+| `stats`   | `[--json]`                | Per-client traffic statistics    |    No     |
 | `show`    |                        | Run `awg show`                 |    No     |
 | `check`   |                        | Check server status            |    No     |
 | `restart` |                        | Restart AmneziaWG service      |    -      |
@@ -201,6 +222,13 @@ sudo bash /root/awg/manage_amneziawg.sh add my_phone       # Add
 sudo bash /root/awg/manage_amneziawg.sh remove my_phone    # Remove
 sudo bash /root/awg/manage_amneziawg.sh list                # List
 sudo bash /root/awg/manage_amneziawg.sh regen               # Regenerate
+
+# Temporary client (7 days)
+sudo bash /root/awg/manage_amneziawg.sh add guest --expires=7d
+
+# Traffic statistics
+sudo bash /root/awg/manage_amneziawg.sh stats
+sudo bash /root/awg/manage_amneziawg.sh stats --json
 
 # Maintenance
 sudo bash /root/awg/manage_amneziawg.sh check               # Diagnostics
@@ -278,6 +306,16 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 <details>
   <summary><strong>Q: How do I migrate the VPN to another server?</strong></summary>
   <b>A:</b> 1. Create a backup: <code>sudo bash /root/awg/manage_amneziawg.sh backup</code>. 2. Copy the backup to the new server. 3. Install AmneziaWG on the new server. 4. Restore: <code>sudo bash /root/awg/manage_amneziawg.sh restore /path/to/backup.tar.gz</code>. 5. Regenerate configs: <code>sudo bash /root/awg/manage_amneziawg.sh regen</code>.
+</details>
+
+<details>
+  <summary><strong>Q: How do I create a temporary client?</strong></summary>
+  <b>A:</b> <code>sudo bash /root/awg/manage_amneziawg.sh add guest --expires=7d</code>. Formats: <code>1h</code>, <code>12h</code>, <code>1d</code>, <code>7d</code>, <code>30d</code>, <code>4w</code>. A cron job checks every 5 minutes and automatically removes expired clients.
+</details>
+
+<details>
+  <summary><strong>Q: What are .vpnuri files?</strong></summary>
+  <b>A:</b> <code>.vpnuri</code> files contain <code>vpn://</code> URIs for one-tap config import into Amnezia Client. Copy the file contents → open Amnezia Client → "Add VPN" → "Paste from clipboard".
 </details>
 
 > More answers and solutions in **[ADVANCED.en.md](ADVANCED.en.md)**.

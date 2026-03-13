@@ -25,6 +25,7 @@
 </p>
 
 <p align="center">
+  <a href="#quickstart">Быстрый старт</a> •
   <a href="#vozmozhnosti">Возможности</a> •
   <a href="#trebovaniya">Требования</a> •
   <a href="#recomend-hosting">Хостинг</a> •
@@ -34,6 +35,17 @@
   <a href="#faq-main">FAQ</a> •
   <a href="#licenziya">Лицензия</a>
 </p>
+
+<a id="quickstart"></a>
+## 🚀 Быстрый старт
+
+```bash
+wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
+chmod +x install_amneziawg.sh
+sudo bash ./install_amneziawg.sh
+```
+
+> 3 команды. 2 перезагрузки. ~5 минут. VPN готов. [Подробнее →](#ustanovka)
 
 ---
 
@@ -51,17 +63,23 @@
 * 🩺 **Диагностика:** Подробный отчет с AWG 2.0 параметрами (`--diagnostic`).
 * 🗑️ **Деинсталляция:** Полное удаление (`--uninstall`).
 * 📝 **Логирование:** Запись всех действий в лог-файлы в `/root/awg/`.
+* 📊 **Статистика трафика:** Команда `stats` с форматированным выводом и `--json` для автоматизации.
+* ⏳ **Временные клиенты:** `--expires` для создания клиентов с авто-удалением по истечении срока (1h-30d).
+* 📱 **Быстрый импорт:** Генерация `vpn://` URI (`.vpnuri`) для импорта в Amnezia Client одним тапом.
+* 🐧 **Debian поддержка:** Полная поддержка Debian 12 (bookworm) и 13 (trixie) наравне с Ubuntu.
 
 ---
 
 <a id="trebovaniya"></a>
 ## 🖥️ Требования
 
-* **ОС:** **Чистая** установка **Ubuntu Server 24.04 LTS Minimal**.
+* **ОС:** **Чистая** установка **Ubuntu Server 24.04 LTS** / **Debian 12** / **Debian 13** Minimal.
 * **Доступ:** Права `root` (через `sudo`).
 * **Интернет:** Стабильное подключение.
 * **Ресурсы:** ~1 ГБ ОЗУ (рекомендуется 2+ ГБ), минимум ~2 ГБ диска (рекомендуется 3+ ГБ).
 * **SSH:** Доступ по SSH.
+
+> **Debian:** На минимальных установках Debian отсутствует `curl` — установите `apt-get install -y curl` перед скачиванием инсталлятора.
 
 **Совместимость ОС:**
 
@@ -69,8 +87,8 @@
 |----|--------|------------|
 | Ubuntu 24.04 LTS | ✅ Полная поддержка | Рекомендуется |
 | Ubuntu 25.10 | ⚠️ Экспериментально | Может потребоваться сборка модуля из исходников |
-| Debian 12 (bookworm) | ✅ Поддержка | PPA через маппинг codename на focal |
-| Debian 13 (trixie) | ⚠️ Экспериментально | PPA через маппинг codename на noble |
+| Debian 12 (bookworm) | ✅ Поддержка | Протестировано. PPA через маппинг codename на focal |
+| Debian 13 (trixie) | ✅ Поддержка | Протестировано. PPA через маппинг codename на noble, DEB822 |
 
 * **Клиент:** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** с поддержкой AWG 2.0.
     > ⚠️ **Не путайте** с `amneziawg-windows-client` — это другой проект (standalone tunnel manager), **не поддерживающий** AWG 2.0.
@@ -101,7 +119,7 @@
 
 Этот метод установки гарантирует корректную работу интерактивных запросов и цветного вывода в вашем терминале.
 
-1.  **Подключитесь** к **чистому** серверу Ubuntu 24.04 по SSH.
+1.  **Подключитесь** к **чистому** серверу (Ubuntu 24.04 / Debian 12 / Debian 13) по SSH.
     > **Совет:** После создания сервера подождите 5-10 минут, чтобы завершились все фоновые процессы инициализации системы, прежде чем запускать установку.
 
 2.  **Скачайте скрипт:**
@@ -144,6 +162,8 @@
 * Файл настроек скрипта: `/root/awg/awgsetup_cfg.init`
 * Скрипт управления: `/root/awg/manage_amneziawg.sh`
 * Общие функции: `/root/awg/awg_common.sh`
+* vpn:// URI файлы: `/root/awg/*.vpnuri`
+* Данные истечения клиентов: `/root/awg/expiry/`
 
 ---
 
@@ -162,13 +182,14 @@ sudo bash /root/awg/manage_amneziawg.sh <команда> [аргументы]
 
 | Команда   | Аргументы              | Описание                     | Перезапуск? |
 | :-------- | :--------------------- | :--------------------------- | :-----------: |
-| `add`     | `<имя_клиента>`        | Добавить клиента             |      **Да** |
+| `add`     | `<имя> [--expires=ВРЕМЯ]` | Добавить клиента (опц. с истечением) | **Да** |
 | `remove`  | `<имя_клиента>`        | Удалить клиента              |      **Да** |
 | `list`    | `[-v]`                 | Список клиентов (`-v` детали) |       Нет     |
 | `regen`   | `[имя_клиента]`        | Переген. файлы (всех/одного) |       Нет     |
 | `modify`  | `<имя> <пар> <зн>`     | Изменить параметр клиента    |       Нет     |
 | `backup`  |                        | Создать резервную копию      |       Нет     |
 | `restore` | `[файл]`               | Восстановить из резервной копии |    Нет     |
+| `stats`   | `[--json]`                | Статистика трафика по клиентам       | Нет     |
 | `show`    |                        | Статус `awg show`            |       Нет     |
 | `check`   |                        | Проверка состояния сервера     |       Нет     |
 | `restart` |                        | Перезапуск сервиса AmneziaWG   |       -       |
@@ -189,6 +210,13 @@ sudo bash /root/awg/manage_amneziawg.sh add my_phone       # Добавить
 sudo bash /root/awg/manage_amneziawg.sh remove my_phone    # Удалить
 sudo bash /root/awg/manage_amneziawg.sh list                # Список
 sudo bash /root/awg/manage_amneziawg.sh regen               # Перегенерация
+
+# Временный клиент (7 дней)
+sudo bash /root/awg/manage_amneziawg.sh add guest --expires=7d
+
+# Статистика трафика
+sudo bash /root/awg/manage_amneziawg.sh stats
+sudo bash /root/awg/manage_amneziawg.sh stats --json
 
 # Обслуживание
 sudo bash /root/awg/manage_amneziawg.sh check               # Диагностика
@@ -260,6 +288,16 @@ sudo systemctl restart awg-quick@awg0                        # После add/re
 <details>
   <summary><strong>В: Как перенести VPN на другой сервер?</strong></summary>
   **О:** 1. Создайте бэкап: <code>sudo bash /root/awg/manage_amneziawg.sh backup</code>. 2. Скопируйте бэкап на новый сервер. 3. Установите AmneziaWG на новом сервере. 4. Восстановите: <code>sudo bash /root/awg/manage_amneziawg.sh restore /path/to/backup.tar.gz</code>. 5. Перегенерируйте конфиги: <code>sudo bash /root/awg/manage_amneziawg.sh regen</code>.
+</details>
+
+<details>
+  <summary><strong>В: Как создать временного клиента?</strong></summary>
+  <b>О:</b> <code>sudo bash /root/awg/manage_amneziawg.sh add guest --expires=7d</code>. Форматы: <code>1h</code>, <code>12h</code>, <code>1d</code>, <code>7d</code>, <code>30d</code>, <code>4w</code>. Cron проверяет каждые 5 минут и автоматически удаляет истёкших клиентов.
+</details>
+
+<details>
+  <summary><strong>В: Что такое файлы .vpnuri?</strong></summary>
+  <b>О:</b> Файлы <code>.vpnuri</code> содержат <code>vpn://</code> URI для импорта конфигурации в Amnezia Client одним тапом. Скопируйте содержимое файла → откройте Amnezia Client → «Добавить VPN» → «Вставить из буфера».
 </details>
 
 > Больше ответов и решений см. в **[ADVANCED.md](ADVANCED.md)**.
