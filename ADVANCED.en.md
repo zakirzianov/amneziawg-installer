@@ -521,7 +521,7 @@ The report (`--diagnostic`) includes the following sections:
 
 | Section | Description |
 |---------|-------------|
-| OS | Ubuntu and kernel version |
+| OS | OS and kernel version |
 | Hardware | RAM, CPU, Swap |
 | Configuration | Contents of `awgsetup_cfg.init` |
 | Server Config | `awg0.conf` (private key hidden) |

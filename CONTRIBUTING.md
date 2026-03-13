@@ -50,7 +50,7 @@ Before submitting a PR, ensure:
    done
    ```
 
-3. **VPS testing** (for script changes): test on a clean Ubuntu 24.04 LTS minimal server installation. The full test matrix includes:
+3. **VPS testing** (for script changes): test on a clean server (Ubuntu 24.04 LTS or Debian 12/13 minimal). The full test matrix includes:
    - Fresh install on clean Ubuntu 24.04 LTS
    - Fresh install on clean Ubuntu 25.10
    - All management commands: add, remove, list, regen, check, restart

@@ -517,7 +517,7 @@ chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
 
 | Секция | Описание |
 |--------|----------|
-| OS | Версия Ubuntu и ядра |
+| OS | Версия ОС и ядра |
 | Hardware | RAM, CPU, Swap |
 | Configuration | Содержимое `awgsetup_cfg.init` |
 | Server Config | `awg0.conf` (приватный ключ скрыт) |
