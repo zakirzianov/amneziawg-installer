@@ -202,6 +202,7 @@ backup_configs() {
     [[ -f /etc/cron.d/awg-expiry ]] && cp -a /etc/cron.d/awg-expiry "$td/" 2>/dev/null || true
 
     tar -czf "$bf" -C "$td" . || { rm -rf "$td"; die "Ошибка tar $bf"; }
+    log_debug "tar: архив создан $bf"
     rm -rf "$td"
     chmod 600 "$bf" || log_warn "Ошибка chmod бэкапа"
 
@@ -271,6 +272,7 @@ restore_backup() {
         cp -a "$td/server/"* "$server_conf_dir/" || log_error "Ошибка копирования server"
         chmod 600 "$server_conf_dir"/*.conf 2>/dev/null
         chmod 700 "$server_conf_dir"
+        log_debug "Конфиг сервера восстановлен в $server_conf_dir"
     fi
 
     if [[ -d "$td/clients" ]]; then
@@ -278,6 +280,7 @@ restore_backup() {
         cp -a "$td/clients/"* "$AWG_DIR/" || log_error "Ошибка копирования clients"
         chmod 600 "$AWG_DIR"/*.conf 2>/dev/null
         chmod 600 "$CONFIG_FILE" 2>/dev/null
+        log_debug "Файлы клиентов восстановлены в $AWG_DIR"
     fi
 
     if [[ -d "$td/keys" ]]; then
@@ -285,6 +288,7 @@ restore_backup() {
         mkdir -p "$KEYS_DIR"
         cp -a "$td/keys/"* "$KEYS_DIR/" || log_error "Ошибка копирования keys"
         chmod 600 "$KEYS_DIR"/* 2>/dev/null
+        log_debug "Ключи восстановлены в $KEYS_DIR"
     fi
 
     # Серверные ключи
@@ -360,6 +364,7 @@ modify_client() {
         cp "$bak" "$cf" || log_warn "Ошибка восстановления."
         return 1
     fi
+    log_debug "sed: ${param} = ${value} в $cf"
 
     log "Параметр '$param' изменен."
 
@@ -738,6 +743,7 @@ case $COMMAND in
 
         log "Добавление '$CLIENT_NAME'..."
         if generate_client "$CLIENT_NAME"; then
+            log_debug "Пир '$CLIENT_NAME' добавлен в серверный конфиг."
             log "Клиент '$CLIENT_NAME' добавлен."
             log "Файлы: $AWG_DIR/${CLIENT_NAME}.conf, $AWG_DIR/${CLIENT_NAME}.png"
             if [[ -f "$AWG_DIR/${CLIENT_NAME}.vpnuri" ]]; then
@@ -766,6 +772,7 @@ case $COMMAND in
 
         log "Удаление '$CLIENT_NAME'..."
         if remove_peer_from_server "$CLIENT_NAME"; then
+            log_debug "Пир '$CLIENT_NAME' удалён из серверного конфига."
             log "Клиент '$CLIENT_NAME' удалён из серверного конфига."
             rm -f "$AWG_DIR/$CLIENT_NAME.conf" "$AWG_DIR/$CLIENT_NAME.png" "$AWG_DIR/$CLIENT_NAME.vpnuri"
             rm -f "$KEYS_DIR/${CLIENT_NAME}.private" "$KEYS_DIR/${CLIENT_NAME}.public"

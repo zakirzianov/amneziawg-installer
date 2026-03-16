@@ -202,6 +202,7 @@ backup_configs() {
     [[ -f /etc/cron.d/awg-expiry ]] && cp -a /etc/cron.d/awg-expiry "$td/" 2>/dev/null || true
 
     tar -czf "$bf" -C "$td" . || { rm -rf "$td"; die "tar error $bf"; }
+    log_debug "tar: archive created $bf"
     rm -rf "$td"
     chmod 600 "$bf" || log_warn "chmod error on backup"
 
@@ -271,6 +272,7 @@ restore_backup() {
         cp -a "$td/server/"* "$server_conf_dir/" || log_error "Error copying server"
         chmod 600 "$server_conf_dir"/*.conf 2>/dev/null
         chmod 700 "$server_conf_dir"
+        log_debug "Server config restored to $server_conf_dir"
     fi
 
     if [[ -d "$td/clients" ]]; then
@@ -278,6 +280,7 @@ restore_backup() {
         cp -a "$td/clients/"* "$AWG_DIR/" || log_error "Error copying clients"
         chmod 600 "$AWG_DIR"/*.conf 2>/dev/null
         chmod 600 "$CONFIG_FILE" 2>/dev/null
+        log_debug "Client files restored to $AWG_DIR"
     fi
 
     if [[ -d "$td/keys" ]]; then
@@ -285,6 +288,7 @@ restore_backup() {
         mkdir -p "$KEYS_DIR"
         cp -a "$td/keys/"* "$KEYS_DIR/" || log_error "Error copying keys"
         chmod 600 "$KEYS_DIR"/* 2>/dev/null
+        log_debug "Keys restored to $KEYS_DIR"
     fi
 
     # Server keys
@@ -360,6 +364,7 @@ modify_client() {
         cp "$bak" "$cf" || log_warn "Restore error."
         return 1
     fi
+    log_debug "sed: ${param} = ${value} in $cf"
 
     log "Parameter '$param' changed."
 
@@ -738,6 +743,7 @@ case $COMMAND in
 
         log "Adding '$CLIENT_NAME'..."
         if generate_client "$CLIENT_NAME"; then
+            log_debug "Peer '$CLIENT_NAME' added to server config."
             log "Client '$CLIENT_NAME' added."
             log "Files: $AWG_DIR/${CLIENT_NAME}.conf, $AWG_DIR/${CLIENT_NAME}.png"
             if [[ -f "$AWG_DIR/${CLIENT_NAME}.vpnuri" ]]; then
@@ -766,6 +772,7 @@ case $COMMAND in
 
         log "Removing '$CLIENT_NAME'..."
         if remove_peer_from_server "$CLIENT_NAME"; then
+            log_debug "Peer '$CLIENT_NAME' removed from server config."
             log "Client '$CLIENT_NAME' removed from server config."
             rm -f "$AWG_DIR/$CLIENT_NAME.conf" "$AWG_DIR/$CLIENT_NAME.png" "$AWG_DIR/$CLIENT_NAME.vpnuri"
             rm -f "$KEYS_DIR/${CLIENT_NAME}.private" "$KEYS_DIR/${CLIENT_NAME}.public"

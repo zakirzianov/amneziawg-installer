@@ -31,6 +31,7 @@ MANAGE_SCRIPT_PATH="$AWG_DIR/manage_amneziawg.sh"
 
 # CLI flags
 UNINSTALL=0; HELP=0; DIAGNOSTIC=0; VERBOSE=0; NO_COLOR=0; AUTO_YES=0; NO_TWEAKS=0
+_APT_UPDATED=0
 CLI_PORT=""; CLI_SUBNET=""; CLI_DISABLE_IPV6="default"
 CLI_ROUTING_MODE="default"; CLI_CUSTOM_ROUTES=""; CLI_ENDPOINT=""; CLI_NO_TWEAKS=0
 
@@ -294,7 +295,10 @@ install_packages() {
         return 0
     fi
     log "Installing: ${to_install[*]}..."
-    apt update -y || log_warn "Failed to update apt."
+    if [[ "${_APT_UPDATED:-0}" -eq 0 ]]; then
+        apt update -y || log_warn "Failed to update apt."
+        _APT_UPDATED=1
+    fi
     DEBIAN_FRONTEND=noninteractive apt install -y "${to_install[@]}" || die "Package installation error."
     log "Packages installed."
 }
@@ -1241,6 +1245,7 @@ step1_update_and_optimize() {
 step2_install_amnezia() {
     update_state 2
     log "### STEP 2: Installing AmneziaWG and dependencies ###"
+    _APT_UPDATED=0  # Reset: new sources will be added in this step
 
     # Enabling deb-src (Ubuntu only — Ubuntu uses ubuntu.sources)
     local sources_file="/etc/apt/sources.list.d/ubuntu.sources"
