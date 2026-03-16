@@ -332,7 +332,7 @@ modify_client() {
     fi
 
     # Parameters allowed for modification
-    local allowed_params="DNS|Endpoint|AllowedIPs|PersistentKeepalive|MTU"
+    local allowed_params="DNS|Endpoint|AllowedIPs|PersistentKeepalive"
     if ! [[ "$param" =~ ^($allowed_params)$ ]]; then
         log_error "Parameter '$param' cannot be changed via modify."
         log_error "Allowed parameters: ${allowed_params//|/, }"

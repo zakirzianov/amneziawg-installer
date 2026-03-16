@@ -404,7 +404,7 @@ get_next_client_ip() {
     return 1
 }
 
-# Atomic [Peer] addition to server config
+# Atomic [Peer] addition to server config (with locking)
 # add_peer_to_server <name> <pubkey> <client_ip>
 add_peer_to_server() {
     local name="$1"
@@ -416,18 +416,30 @@ add_peer_to_server() {
         return 1
     fi
 
+    # Inter-process lock (prevents race between cron expiry + manual operation)
+    local lockfile="${AWG_DIR}/.awg_config.lock"
+    local lock_fd
+    exec {lock_fd}>"$lockfile"
+    if ! flock -x -w 10 "$lock_fd"; then
+        log_error "Failed to acquire config lock"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
     if grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE" 2>/dev/null; then
         log_error "Peer '$name' already exists in config"
+        exec {lock_fd}>&-
         return 1
     fi
 
     # Add peer via temp file (atomic)
     local tmpfile
-    tmpfile=$(awg_mktemp) || { log_error "mktemp failed"; return 1; }
+    tmpfile=$(awg_mktemp) || { log_error "mktemp failed"; exec {lock_fd}>&-; return 1; }
 
     cp "$SERVER_CONF_FILE" "$tmpfile" || {
         rm -f "$tmpfile"
         log_error "Failed to copy server config"
+        exec {lock_fd}>&-
         return 1
     }
 
@@ -442,14 +454,16 @@ EOF
     if ! mv "$tmpfile" "$SERVER_CONF_FILE"; then
         rm -f "$tmpfile"
         log_error "Failed to update server config"
+        exec {lock_fd}>&-
         return 1
     fi
     chmod 600 "$SERVER_CONF_FILE"
+    exec {lock_fd}>&-
     log "Peer '$name' added to server config."
     return 0
 }
 
-# Remove [Peer] from server config by name
+# Remove [Peer] from server config by name (with locking)
 # remove_peer_from_server <name>
 remove_peer_from_server() {
     local name="$1"
@@ -459,13 +473,24 @@ remove_peer_from_server() {
         return 1
     fi
 
+    # Inter-process lock
+    local lockfile="${AWG_DIR}/.awg_config.lock"
+    local lock_fd
+    exec {lock_fd}>"$lockfile"
+    if ! flock -x -w 10 "$lock_fd"; then
+        log_error "Failed to acquire config lock"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
     if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE" 2>/dev/null; then
         log_error "Peer '$name' not found in config"
+        exec {lock_fd}>&-
         return 1
     fi
 
     local tmpfile
-    tmpfile=$(awg_mktemp) || { log_error "mktemp failed"; return 1; }
+    tmpfile=$(awg_mktemp) || { log_error "mktemp failed"; exec {lock_fd}>&-; return 1; }
 
     # Remove [Peer] block containing #_Name = name
     # Logic: buffer each [Peer] block, check name, print only if not matching
@@ -502,9 +527,11 @@ remove_peer_from_server() {
     if ! mv "$tmpfile" "$SERVER_CONF_FILE"; then
         rm -f "$tmpfile"
         log_error "Failed to update server config"
+        exec {lock_fd}>&-
         return 1
     fi
     chmod 600 "$SERVER_CONF_FILE"
+    exec {lock_fd}>&-
     log "Peer '$name' removed from server config."
     return 0
 }

@@ -404,7 +404,7 @@ get_next_client_ip() {
     return 1
 }
 
-# Атомарное добавление [Peer] в серверный конфиг
+# Атомарное добавление [Peer] в серверный конфиг (с блокировкой)
 # add_peer_to_server <name> <pubkey> <client_ip>
 add_peer_to_server() {
     local name="$1"
@@ -416,18 +416,30 @@ add_peer_to_server() {
         return 1
     fi
 
+    # Межпроцессная блокировка (защита от гонки cron expiry + manual operation)
+    local lockfile="${AWG_DIR}/.awg_config.lock"
+    local lock_fd
+    exec {lock_fd}>"$lockfile"
+    if ! flock -x -w 10 "$lock_fd"; then
+        log_error "Не удалось получить блокировку конфига"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
     if grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE" 2>/dev/null; then
         log_error "Пир '$name' уже существует в конфиге"
+        exec {lock_fd}>&-
         return 1
     fi
 
     # Добавляем пир через временный файл (атомарно)
     local tmpfile
-    tmpfile=$(awg_mktemp) || { log_error "Ошибка mktemp"; return 1; }
+    tmpfile=$(awg_mktemp) || { log_error "Ошибка mktemp"; exec {lock_fd}>&-; return 1; }
 
     cp "$SERVER_CONF_FILE" "$tmpfile" || {
         rm -f "$tmpfile"
         log_error "Ошибка копирования серверного конфига"
+        exec {lock_fd}>&-
         return 1
     }
 
@@ -442,14 +454,16 @@ EOF
     if ! mv "$tmpfile" "$SERVER_CONF_FILE"; then
         rm -f "$tmpfile"
         log_error "Ошибка обновления серверного конфига"
+        exec {lock_fd}>&-
         return 1
     fi
     chmod 600 "$SERVER_CONF_FILE"
+    exec {lock_fd}>&-
     log "Пир '$name' добавлен в серверный конфиг."
     return 0
 }
 
-# Удаление [Peer] из серверного конфига по имени
+# Удаление [Peer] из серверного конфига по имени (с блокировкой)
 # remove_peer_from_server <name>
 remove_peer_from_server() {
     local name="$1"
@@ -459,13 +473,24 @@ remove_peer_from_server() {
         return 1
     fi
 
+    # Межпроцессная блокировка
+    local lockfile="${AWG_DIR}/.awg_config.lock"
+    local lock_fd
+    exec {lock_fd}>"$lockfile"
+    if ! flock -x -w 10 "$lock_fd"; then
+        log_error "Не удалось получить блокировку конфига"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
     if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE" 2>/dev/null; then
         log_error "Пир '$name' не найден в конфиге"
+        exec {lock_fd}>&-
         return 1
     fi
 
     local tmpfile
-    tmpfile=$(awg_mktemp) || { log_error "Ошибка mktemp"; return 1; }
+    tmpfile=$(awg_mktemp) || { log_error "Ошибка mktemp"; exec {lock_fd}>&-; return 1; }
 
     # Удаляем блок [Peer] содержащий #_Name = name
     # Логика: буферизуем каждый [Peer] блок, проверяем имя, выводим только если не совпадает
@@ -502,9 +527,11 @@ remove_peer_from_server() {
     if ! mv "$tmpfile" "$SERVER_CONF_FILE"; then
         rm -f "$tmpfile"
         log_error "Ошибка обновления серверного конфига"
+        exec {lock_fd}>&-
         return 1
     fi
     chmod 600 "$SERVER_CONF_FILE"
+    exec {lock_fd}>&-
     log "Пир '$name' удалён из серверного конфига."
     return 0
 }
