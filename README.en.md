@@ -100,8 +100,8 @@ All parameters are accepted automatically. Details: [ADVANCED.en.md#cli-params-a
 | Debian 12 (bookworm) | ✅ Supported | Tested. PPA via codename mapping to focal |
 | Debian 13 (trixie) | ✅ Supported | Tested. PPA via codename mapping to noble, DEB822 |
 
-* **Client:** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** with AWG 2.0 support.
-    > ⚠️ **Do not confuse** with `amneziawg-windows-client` — that is a different project (standalone tunnel manager) that **does not support** AWG 2.0.
+* **Client (all platforms):** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** — full-featured VPN client with AWG 2.0. Import via `vpn://` URI.
+* **Client (Windows):** [AmneziaWG](https://github.com/amnezia-vpn/amneziawg-windows-client/releases) **>= 2.0.0** — lightweight tunnel manager with AWG 2.0. Import via `.conf` files.
     > ⚠️ **IMPORTANT:** If you use a **non-standard SSH port** (other than 22), you **MUST** add a rule `sudo ufw allow YOUR_PORT/tcp` **BEFORE** running the installer!
 
 ---
@@ -272,7 +272,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 
 <details>
   <summary><strong>Q: Clients can't connect — what should I do?</strong></summary>
-  <b>A:</b> 1. Check status: <code>sudo bash /root/awg/manage_amneziawg.sh check</code>. 2. Check firewall: <code>sudo ufw status verbose</code>. 3. Verify client config. 4. Check logs: <code>sudo journalctl -u awg-quick@awg0 -n 50</code>. 5. Make sure the Amnezia VPN client is version <b>>= 4.8.12.7</b>.
+  <b>A:</b> 1. Check status: <code>sudo bash /root/awg/manage_amneziawg.sh check</code>. 2. Check firewall: <code>sudo ufw status verbose</code>. 3. Verify client config. 4. Check logs: <code>sudo journalctl -u awg-quick@awg0 -n 50</code>. 5. Make sure the client supports AWG 2.0: Amnezia VPN <b>>= 4.8.12.7</b> or AmneziaWG <b>>= 2.0.0</b>.
 </details>
 
 <details>
@@ -282,7 +282,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 
 <details>
   <summary><strong>Q: Config import error "Invalid key: s3" — what's wrong?</strong></summary>
-  <b>A:</b> You're using <code>amneziawg-windows-client</code> (a standalone tunnel manager) that <b>does not support</b> AWG 2.0. Install the full <a href="https://github.com/amnezia-vpn/amnezia-client/releases"><b>Amnezia VPN</b></a> client version <b>>= 4.8.12.7</b> — it supports all AWG 2.0 parameters (S3, S4, I1, H1-H4 ranges).
+  <b>A:</b> You're using an outdated version of <code>amneziawg-windows-client</code> (< 2.0.0). Update to <a href="https://github.com/amnezia-vpn/amneziawg-windows-client/releases"><b>version 2.0.0+</b></a> which supports AWG 2.0. Alternatively, use <a href="https://github.com/amnezia-vpn/amnezia-client/releases"><b>Amnezia VPN</b></a> >= 4.8.12.7.
 </details>
 
 <details>
@@ -348,6 +348,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 |---------|-------------|
 | [Junker](https://spatiumstas.github.io/junker/) | AmneziaWG signature generator by @spatiumstas — for manual setup without an installer script |
 | [Amnezia VPN Client](https://github.com/amnezia-vpn/amnezia-client) | Official client with AWG 2.0 support (>= 4.8.12.7) |
+| [AmneziaWG for Windows](https://github.com/amnezia-vpn/amneziawg-windows-client) | Lightweight tunnel manager for Windows with AWG 2.0 (>= 2.0.0) |
 | [AmneziaWG-Architect](https://vadim-khristenko.github.io/AmneziaWG-Architect/) | CPS/mimicry generator UI for AWG 2.0 by @Vadim-Khristenko ([GitHub](https://github.com/Vadim-Khristenko/AmneziaWG-Architect)) |
 
 ---
