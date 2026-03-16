@@ -313,7 +313,7 @@ modify_client() {
     fi
 
     # Допустимые для модификации параметры
-    local allowed_params="DNS|Endpoint|AllowedIPs|Address|PersistentKeepalive|MTU"
+    local allowed_params="DNS|Endpoint|AllowedIPs|PersistentKeepalive|MTU"
     if ! [[ "$param" =~ ^($allowed_params)$ ]]; then
         log_error "Параметр '$param' нельзя изменить через modify."
         log_error "Допустимые параметры: ${allowed_params//|/, }"
@@ -327,7 +327,7 @@ modify_client() {
     local cf="$AWG_DIR/$name.conf"
     if [[ ! -f "$cf" ]]; then die "Файл $cf не найден."; fi
 
-    if ! grep -q -E "^${param}\s*=" "$cf"; then
+    if ! grep -q -E "^${param}[[:space:]]*=" "$cf"; then
         log_error "Параметр '$param' не найден в $cf."
         return 1
     fi
@@ -348,12 +348,9 @@ modify_client() {
 
     log "Параметр '$param' изменен."
 
-    # Перегенерация QR и vpn:// URI для важных параметров
-    if [[ "$param" =~ ^(AllowedIPs|Address|PublicKey|Endpoint|PrivateKey|DNS)$ ]]; then
-        log "Перегенерация QR-кода и vpn:// URI..."
-        generate_qr "$name" || log_warn "Не удалось обновить QR-код."
-        generate_vpn_uri "$name" || log_warn "Не удалось обновить vpn:// URI."
-    fi
+    log "Перегенерация QR-кода и vpn:// URI..."
+    generate_qr "$name" || log_warn "Не удалось обновить QR-код."
+    generate_vpn_uri "$name" || log_warn "Не удалось обновить vpn:// URI."
 
     return 0
 }

@@ -313,7 +313,7 @@ modify_client() {
     fi
 
     # Parameters allowed for modification
-    local allowed_params="DNS|Endpoint|AllowedIPs|Address|PersistentKeepalive|MTU"
+    local allowed_params="DNS|Endpoint|AllowedIPs|PersistentKeepalive|MTU"
     if ! [[ "$param" =~ ^($allowed_params)$ ]]; then
         log_error "Parameter '$param' cannot be changed via modify."
         log_error "Allowed parameters: ${allowed_params//|/, }"
@@ -327,7 +327,7 @@ modify_client() {
     local cf="$AWG_DIR/$name.conf"
     if [[ ! -f "$cf" ]]; then die "File $cf not found."; fi
 
-    if ! grep -q -E "^${param}\s*=" "$cf"; then
+    if ! grep -q -E "^${param}[[:space:]]*=" "$cf"; then
         log_error "Parameter '$param' not found in $cf."
         return 1
     fi
@@ -348,12 +348,9 @@ modify_client() {
 
     log "Parameter '$param' changed."
 
-    # Regenerate QR and vpn:// URI for important parameters
-    if [[ "$param" =~ ^(AllowedIPs|Address|PublicKey|Endpoint|PrivateKey|DNS)$ ]]; then
-        log "Regenerating QR code and vpn:// URI..."
-        generate_qr "$name" || log_warn "Failed to update QR code."
-        generate_vpn_uri "$name" || log_warn "Failed to update vpn:// URI."
-    fi
+    log "Regenerating QR code and vpn:// URI..."
+    generate_qr "$name" || log_warn "Failed to update QR code."
+    generate_vpn_uri "$name" || log_warn "Failed to update vpn:// URI."
 
     return 0
 }
