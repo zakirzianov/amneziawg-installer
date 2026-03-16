@@ -329,6 +329,54 @@ configure_ipv6() {
     log "IPv6 disable: $(if [ "$DISABLE_IPV6" -eq 1 ]; then echo 'Yes'; else echo 'No'; fi)"
 }
 
+# Safe configuration loader (whitelist parser, no source/eval)
+safe_load_config() {
+    local config_file="${1:-$CONFIG_FILE}"
+    if [[ ! -f "$config_file" ]]; then return 1; fi
+
+    local line key value
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// /}" ]] && continue
+        line="${line#export }"
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            key="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+            if [[ "$value" == \'*\' ]]; then
+                value="${value#\'}"
+                value="${value%\'}"
+            fi
+            case "$key" in
+                OS_ID|OS_VERSION|OS_CODENAME|AWG_PORT|AWG_TUNNEL_SUBNET|\
+                DISABLE_IPV6|ALLOWED_IPS_MODE|ALLOWED_IPS|AWG_ENDPOINT|\
+                AWG_Jc|AWG_Jmin|AWG_Jmax|AWG_S1|AWG_S2|AWG_S3|AWG_S4|\
+                AWG_H1|AWG_H2|AWG_H3|AWG_H4|AWG_I1|NO_TWEAKS)
+                    export "$key=$value"
+                    ;;
+            esac
+        fi
+    done < "$config_file"
+}
+
+# Read a single key from config (for point queries)
+safe_read_config_key() {
+    local key="$1" config_file="${2:-$CONFIG_FILE}"
+    local line
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line#export }"
+        if [[ "$line" =~ ^${key}=(.*)$ ]]; then
+            local value="${BASH_REMATCH[1]}"
+            if [[ "$value" == \'*\' ]]; then
+                value="${value#\'}"
+                value="${value%\'}"
+            fi
+            echo "$value"
+            return 0
+        fi
+    done < "$config_file"
+    return 1
+}
+
 validate_port() {
     local port="$1"
     if ! [[ "$port" =~ ^[0-9]+$ ]] || [[ "$port" -lt 1024 ]] || [[ "$port" -gt 65535 ]]; then
@@ -829,7 +877,7 @@ check_service_status() {
     local port_check=${AWG_PORT:-0}
     if [[ "$port_check" -eq 0 ]] && [[ -f "$CONFIG_FILE" ]]; then
         # shellcheck source=/dev/null
-        port_check=$(source "$CONFIG_FILE" && echo "$AWG_PORT")
+        port_check=$(safe_read_config_key "AWG_PORT" "$CONFIG_FILE")
         port_check=${port_check:-0}
     fi
     if [[ "$port_check" -ne 0 ]]; then
@@ -960,7 +1008,7 @@ step_uninstall() {
     local saved_no_tweaks=0
     if [[ -f "$CONFIG_FILE" ]]; then
         # shellcheck source=/dev/null
-        saved_no_tweaks=$(source "$CONFIG_FILE" 2>/dev/null && echo "${NO_TWEAKS:-0}") || true
+        saved_no_tweaks=$(safe_read_config_key "NO_TWEAKS" "$CONFIG_FILE" 2>/dev/null) || saved_no_tweaks=0
         saved_no_tweaks=${saved_no_tweaks:-0}
     fi
     log "Stopping service..."
@@ -978,7 +1026,7 @@ step_uninstall() {
             local port_to_del
             if [[ -f "$CONFIG_FILE" ]]; then
                 # shellcheck source=/dev/null
-                port_to_del=$(source "$CONFIG_FILE" && echo "$AWG_PORT")
+                port_to_del=$(safe_read_config_key "AWG_PORT" "$CONFIG_FILE")
             fi
             port_to_del=${port_to_del:-39743}
             ufw delete allow "${port_to_del}/udp" 2>/dev/null
@@ -1067,7 +1115,7 @@ initialize_setup() {
         log "Configuration file found $CONFIG_FILE. Loading settings..."
         config_exists=1
         # shellcheck source=/dev/null
-        source "$CONFIG_FILE" || log_warn "Failed to fully load settings from $CONFIG_FILE."
+        safe_load_config "$CONFIG_FILE" || log_warn "Failed to fully load settings from $CONFIG_FILE."
         AWG_PORT=${AWG_PORT:-$default_port}
         AWG_TUNNEL_SUBNET=${AWG_TUNNEL_SUBNET:-$default_subnet}
         DISABLE_IPV6=${DISABLE_IPV6:-"default"}

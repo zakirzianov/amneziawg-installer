@@ -77,14 +77,43 @@ get_server_public_ip() {
 # Загрузка / сохранение параметров
 # ==============================================================================
 
+# Безопасная загрузка конфигурации (whitelist-парсер, без source/eval)
+# Парсит только разрешённые ключи формата KEY=VALUE или export KEY=VALUE
+safe_load_config() {
+    local config_file="${1:-$CONFIG_FILE}"
+    if [[ ! -f "$config_file" ]]; then return 1; fi
+
+    local line key value
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// /}" ]] && continue
+        line="${line#export }"
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            key="${BASH_REMATCH[1]}"
+            value="${BASH_REMATCH[2]}"
+            if [[ "$value" == \'*\' ]]; then
+                value="${value#\'}"
+                value="${value%\'}"
+            fi
+            case "$key" in
+                OS_ID|OS_VERSION|OS_CODENAME|AWG_PORT|AWG_TUNNEL_SUBNET|\
+                DISABLE_IPV6|ALLOWED_IPS_MODE|ALLOWED_IPS|AWG_ENDPOINT|\
+                AWG_Jc|AWG_Jmin|AWG_Jmax|AWG_S1|AWG_S2|AWG_S3|AWG_S4|\
+                AWG_H1|AWG_H2|AWG_H3|AWG_H4|AWG_I1|NO_TWEAKS)
+                    export "$key=$value"
+                    ;;
+            esac
+        fi
+    done < "$config_file"
+}
+
 # Загрузка AWG параметров из файла конфигурации
 load_awg_params() {
     if [[ ! -f "$CONFIG_FILE" ]]; then
         log_error "Файл конфигурации $CONFIG_FILE не найден."
         return 1
     fi
-    # shellcheck source=/dev/null
-    source "$CONFIG_FILE" || {
+    safe_load_config "$CONFIG_FILE" || {
         log_error "Ошибка загрузки $CONFIG_FILE"
         return 1
     }

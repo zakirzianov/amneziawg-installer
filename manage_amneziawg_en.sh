@@ -396,7 +396,7 @@ check_server() {
 
     log "Port listening:"
     # shellcheck source=/dev/null
-    source "$CONFIG_FILE" 2>/dev/null
+    safe_load_config "$CONFIG_FILE" 2>/dev/null
     local port=${AWG_PORT:-0}
     if [[ "$port" -eq 0 ]]; then
         log_warn " - Failed to determine port."
