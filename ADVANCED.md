@@ -44,16 +44,7 @@
 
 ---
 
-### Что нового в v5.7.2
-
-- **Безопасная загрузка конфигурации** — whitelist-парсер `safe_load_config()` вместо `source` для защиты от инъекций
-- **Supply chain pinning** — URL скачивания скриптов привязаны к тегу версии, а не к `main`
-- **HTTPS для IP-детекции** — внешний IP определяется через HTTPS
-- **Блокировка параллельных операций** — `flock` для add/remove peer предотвращает race conditions
-- **Оптимизация list_clients** — однопроходный алгоритм O(N) вместо O(N*M)
-- **Бэкапы с expiry** — резервные копии включают данные истечения клиентов и cron-задачу
-
-Полный список изменений см. в [CHANGELOG.md](CHANGELOG.md#572--2026-03-16).
+> История изменений по версиям: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
@@ -294,7 +285,7 @@ PersistentKeepalive = 33
 ## 🖥️ CLI Параметры запуска скриптов
 
 <a id="install-cli-adv"></a>
-### install_amneziawg.sh (v5.7.3)
+### install_amneziawg.sh
 
 ```
 Опции:
@@ -316,7 +307,7 @@ PersistentKeepalive = 33
 ```
 
 <a id="manage-cli-adv"></a>
-### manage_amneziawg.sh (v5.7.3)
+### manage_amneziawg.sh
 
 ```
 Опции:
@@ -377,7 +368,7 @@ sudo bash /root/awg/manage_amneziawg.sh restore
 ## 🛠️ Технические детали
 
 <a id="architecture-adv"></a>
-### Архитектура скриптов (v5.7.3)
+### Архитектура скриптов
 
 | Файл | Назначение |
 |------|-----------|
@@ -678,6 +669,8 @@ sudo bash /root/awg/manage_amneziawg.sh add guest --expires=7d
 **Расположение файлов:** `/root/awg/<имя_клиента>.vpnuri`
 
 **Формат:** Конфигурация сжимается через zlib (Perl `Compress::Zlib`) и кодируется в Base64, формируя URI вида `vpn://...`.
+
+> Perl с модулями `Compress::Zlib` и `MIME::Base64` должен быть на сервере. На Ubuntu и Debian они установлены по умолчанию. Если Perl отсутствует, `.vpnuri` файлы не создаются, но `.conf` файлы работают штатно.
 
 **Использование в Amnezia Client:**
 

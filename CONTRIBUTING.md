@@ -45,7 +45,7 @@ Before submitting a PR, ensure:
    done
    ```
 
-2. **ShellCheck** passes:
+2. **ShellCheck** (version from Ubuntu repositories, typically >= 0.9.0) passes:
    ```bash
    for f in install_amneziawg.sh install_amneziawg_en.sh manage_amneziawg.sh manage_amneziawg_en.sh awg_common.sh awg_common_en.sh; do
      shellcheck -s bash -S warning "$f"
@@ -63,6 +63,8 @@ Before submitting a PR, ensure:
    - Client expiry: add with --expires, verify cron auto-removal
    - Stats: verify `stats` and `stats --json` output
    - Backup/restore: verify expiry data and cron job are included in backup and correctly restored
+   - Uninstall + reinstall: `--uninstall` followed by fresh install on same server
+   - vpn:// URI: verify `.vpnuri` files created when Perl + `Compress::Zlib` available
    - Uninstall: verify complete cleanup (UFW, Fail2Ban, cron, kernel module, working directory)
 
 ## Security Review Checklist

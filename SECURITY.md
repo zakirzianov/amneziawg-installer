@@ -39,3 +39,9 @@ The following are **out of scope**:
 - Upstream kernel module (`amneziawg-linux-kernel-module`)
 - Upstream userspace tools (`amneziawg-go`, `amneziawg-tools`)
 - Issues in the underlying operating system
+
+Vulnerabilities in upstream AmneziaWG components (kernel module, userspace tools, client apps) should be reported directly to [amnezia-vpn](https://github.com/amnezia-vpn). We update scripts as upstream fixes arrive.
+
+## Disclosure Policy
+
+Coordinated disclosure. 30 days for a fix before public disclosure. If a vulnerability is actively exploited, indicate this in your report for priority handling.

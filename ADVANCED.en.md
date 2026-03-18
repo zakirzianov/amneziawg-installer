@@ -44,16 +44,7 @@ This is a supplement to the main [README.en.md](README.en.md), containing deeper
 
 ---
 
-### What's New in v5.7.2
-
-- **Safe configuration loading** — whitelist parser `safe_load_config()` replaces `source` to prevent injection attacks
-- **Supply chain pinning** — script download URLs are pinned to the version tag, not `main`
-- **HTTPS for IP detection** — external IP is determined via HTTPS
-- **Parallel operation locking** — `flock` for add/remove peer prevents race conditions
-- **Optimized list_clients** — single-pass O(N) algorithm instead of O(N*M)
-- **Backups with expiry** — backups now include client expiry data and cron job
-
-For the full list of changes, see [CHANGELOG.en.md](CHANGELOG.en.md#572--2026-03-16).
+> For the full version history, see [CHANGELOG.en.md](CHANGELOG.en.md).
 
 ---
 
@@ -294,7 +285,7 @@ PersistentKeepalive = 33
 ## 🖥️ CLI Parameters
 
 <a id="install-cli-adv"></a>
-### install_amneziawg.sh (v5.7.3)
+### install_amneziawg.sh
 
 ```
 Options:
@@ -316,7 +307,7 @@ Options:
 ```
 
 <a id="manage-cli-adv"></a>
-### manage_amneziawg.sh (v5.7.3)
+### manage_amneziawg.sh
 
 ```
 Options:
@@ -377,7 +368,7 @@ sudo bash /root/awg/manage_amneziawg.sh restore
 ## 🛠️ Technical Details
 
 <a id="architecture-adv"></a>
-### Script Architecture (v5.7.3)
+### Script Architecture
 
 | File | Purpose |
 |------|---------|
@@ -682,6 +673,8 @@ When a client is created, a `.vpnuri` file is automatically generated with a `vp
 **File location:** `/root/awg/<client_name>.vpnuri`
 
 **Format:** The configuration is compressed via zlib (Perl `Compress::Zlib`) and Base64-encoded, forming a URI like `vpn://...`.
+
+> Perl with `Compress::Zlib` and `MIME::Base64` modules must be present on the server. On Ubuntu and Debian they are installed by default. If Perl is absent, `.vpnuri` files are not created, but `.conf` files work as usual.
 
 **Using with Amnezia Client:**
 
