@@ -294,7 +294,7 @@ PersistentKeepalive = 33
 ## 🖥️ CLI Параметры запуска скриптов
 
 <a id="install-cli-adv"></a>
-### install_amneziawg.sh (v5.7.2)
+### install_amneziawg.sh (v5.7.3)
 
 ```
 Опции:
@@ -316,7 +316,7 @@ PersistentKeepalive = 33
 ```
 
 <a id="manage-cli-adv"></a>
-### manage_amneziawg.sh (v5.7.2)
+### manage_amneziawg.sh (v5.7.3)
 
 ```
 Опции:
@@ -377,7 +377,7 @@ sudo bash /root/awg/manage_amneziawg.sh restore
 ## 🛠️ Технические детали
 
 <a id="architecture-adv"></a>
-### Архитектура скриптов (v5.7.2)
+### Архитектура скриптов (v5.7.3)
 
 | Файл | Назначение |
 |------|-----------|
@@ -434,12 +434,12 @@ graph TD
 
 Ключи клиентов хранятся в `/root/awg/keys/` (права 600). Серверные ключи — в `/root/awg/server_private.key` и `server_public.key`.
 
-#### Привязка URL к версии (v5.7.2)
+#### Привязка URL к версии (v5.7.3)
 
 Инсталлятор скачивает `awg_common.sh` и `manage_amneziawg.sh` с URL, привязанных к конкретному тегу версии:
 
 ```
-https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.7.2/awg_common.sh
+https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.7.3/awg_common.sh
 ```
 
 Это обеспечивает **supply chain pinning** — гарантию, что скачиваемые скрипты соответствуют версии инсталлятора, даже если `main` уже обновлён.
