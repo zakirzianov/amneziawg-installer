@@ -1,6 +1,6 @@
 <a id="top"></a>
 <p align="center">
-  🇷🇺 <a href="README.md">Русский</a> | 🇬🇧 <b>English</b>
+  <b>RU</b> <a href="README.md">Русский</a> | <b>EN</b> English
 </p>
 
 <p align="center">

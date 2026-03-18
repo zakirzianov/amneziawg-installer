@@ -1,5 +1,5 @@
 <p align="center">
-  🇷🇺 <a href="CHANGELOG.md">Русский</a> | 🇬🇧 <b>English</b>
+  <b>RU</b> <a href="CHANGELOG.md">Русский</a> | <b>EN</b> English
 </p>
 
 # Changelog

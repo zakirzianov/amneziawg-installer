@@ -1,5 +1,5 @@
 <p align="center">
-  🇷🇺 <a href="ADVANCED.md">Русский</a> | 🇬🇧 <b>English</b>
+  <b>RU</b> <a href="ADVANCED.md">Русский</a> | <b>EN</b> English
 </p>
 
 # AmneziaWG 2.0 Installer: Advanced Documentation
