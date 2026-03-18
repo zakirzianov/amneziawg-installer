@@ -25,33 +25,46 @@
 </p>
 
 <p align="center">
+  <a href="#why">Why this project</a> •
   <a href="#quickstart">Quick Start</a> •
   <a href="#features">Features</a> •
   <a href="#requirements">Requirements</a> •
   <a href="#hosting-recommendation">Hosting</a> •
   <a href="#installation">Installation</a> •
+  <a href="#after-installation">After installation</a> •
   <a href="#client-management">Management</a> •
   <a href="#additional-information">More</a> •
   <a href="#faq">FAQ</a> •
   <a href="#license">License</a>
 </p>
 
+<a id="why"></a>
+## 💡 Why this project
+
+[AmneziaWG](https://github.com/amnezia-vpn) is a fork of WireGuard with traffic obfuscation. DPI systems cannot distinguish it from random noise, so the connection is not blocked.
+
+This set of scripts turns a clean VPS into a ready-to-use VPN server. No Linux knowledge required — the script configures the firewall, optimizes the system, and generates client configs and QR codes automatically.
+
+Works on Ubuntu 24.04/25.10 and Debian 12/13. Any cheap VPS with 1 GB RAM is enough.
+
+---
+
 <a id="quickstart"></a>
 ## 🚀 Quick Start
 
 ```bash
-wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
-chmod +x install_amneziawg.sh
-sudo bash ./install_amneziawg.sh
+wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg_en.sh
+chmod +x install_amneziawg_en.sh
+sudo bash ./install_amneziawg_en.sh
 ```
 
-> 3 commands. 2 reboots. ~5 minutes. VPN ready. [Learn more →](#installation)
+> 3 commands to start. 2 reboots along the way. About 20 minutes to a working VPN. [Learn more →](#installation)
 
 <details>
 <summary><strong>Non-interactive installation (for automation)</strong></summary>
 
 ```bash
-sudo bash ./install_amneziawg.sh --yes --route-all
+sudo bash ./install_amneziawg_en.sh --yes --route-all
 ```
 
 All parameters are accepted automatically. Details: [ADVANCED.en.md#cli-params-adv](ADVANCED.en.md#cli-params-adv)
@@ -62,32 +75,37 @@ All parameters are accepted automatically. Details: [ADVANCED.en.md#cli-params-a
 <a id="features"></a>
 ## ✨ Features
 
-* 🚀 **AmneziaWG 2.0:** Full support for the AWG 2.0 protocol with obfuscation parameters H1-H4 (ranges), S1-S4, CPS (I1).
-* 🔧 **Native key generation:** All keys and configs are generated using Bash + `awg` with no external dependencies (Python/awgcfg.py removed).
-* 🧹 **Automated system optimization:** Turns a bare Ubuntu VPS into a hardened VPN server — package cleanup (snapd, modemmanager, etc.), hardware-aware swap/NIC/sysctl tuning.
-* 🔄 **Resume after reboot:** Installation can be safely interrupted (for required reboots) and resumed automatically.
-* 🔒 **Secure by default:** UFW with SSH rate-limiting, optional IPv6 disable, strict file permissions, sysctl hardening, Fail2Ban.
-* ⚙️ **Reliable DKMS:** Kernel module installed via DKMS with dependency and vermagic checks.
-* 🎛️ **Flexible configuration:** Choose port, subnet, IPv6 mode, and routing mode at install time. `--endpoint` flag for servers behind NAT.
-* 🧑‍💻 **Easy management:** Convenient `manage_amneziawg.sh` script for client and server operations.
-* 🩺 **Diagnostics:** Detailed report with AWG 2.0 parameters (`--diagnostic`).
-* 🗑️ **Clean uninstall:** Full removal (`--uninstall`).
-* 📝 **Logging:** All actions logged to files in `/root/awg/`.
-* 📊 **Traffic statistics:** `stats` command with formatted output and `--json` for automation.
-* ⏳ **Temporary clients:** `--expires` to create clients with auto-removal on expiration (1h, 12h, 1d, 7d, 30d, 4w).
-* 📱 **Quick import:** `vpn://` URI generation (`.vpnuri`) for one-tap import into Amnezia Client.
-* 🐧 **Debian support:** Full support for Debian 12 (bookworm) and 13 (trixie) alongside Ubuntu.
+* **DPI bypass** — AmneziaWG 2.0 with traffic obfuscation. DPI cannot detect the connection
+* **One command — working VPN** — from a clean VPS to a running server with client configs and QR codes
+* **Secure by default** — UFW, Fail2Ban, sysctl hardening, strict file permissions (600/700)
+* **Easy management** — add/remove clients, temporary clients with auto-removal, traffic stats, backups
+* **4 operating systems** — Ubuntu 24.04, Ubuntu 25.10, Debian 12, Debian 13
+
+<details>
+<summary><strong>All features</strong></summary>
+
+* Native key and config generation via `awg` — no Python or external dependencies
+* Hardware-aware optimization: swap, NIC offloads, network buffers tuned to server specs
+* DKMS — automatic kernel module rebuild on updates
+* `vpn://` URI for one-tap import into Amnezia Client (`.vpnuri` files)
+* Per-client traffic statistics (`stats`, `stats --json`)
+* Temporary clients with auto-removal (`--expires=1h`, `7d`, `4w`, etc.)
+* Diagnostic report (`--diagnostic`) and full uninstall (`--uninstall`)
+* All actions logged to `/root/awg/`
+* Resume after reboot — the script picks up from where it left off
+* Choice of port, subnet, IPv6 mode, and routing mode. `--endpoint` flag for servers behind NAT
+</details>
 
 ---
 
 <a id="requirements"></a>
 ## 🖥️ Requirements
 
-* **OS:** A **clean** installation of **Ubuntu Server 24.04 LTS** / **Ubuntu 25.10** (⚠️) / **Debian 12** / **Debian 13** Minimal.
-* **Access:** `root` privileges (via `sudo`).
-* **Internet:** Stable connection.
-* **Resources:** ~1 GB RAM (2+ GB recommended), minimum ~2 GB disk (3+ GB recommended).
-* **SSH:** SSH access to the server.
+* **OS:** A **clean** installation of **Ubuntu Server 24.04 LTS** / **Ubuntu 25.10** (⚠️) / **Debian 12** / **Debian 13** Minimal
+* **Access:** `root` privileges (via `sudo`)
+* **Internet:** Stable connection
+* **Resources:** ~1 GB RAM (2+ GB recommended), minimum ~2 GB disk (3+ GB recommended)
+* **SSH:** SSH access to the server
 
 **OS Compatibility:**
 
@@ -98,9 +116,11 @@ All parameters are accepted automatically. Details: [ADVANCED.en.md#cli-params-a
 | Debian 12 (bookworm) | ✅ Supported | Tested. PPA via codename mapping to focal |
 | Debian 13 (trixie) | ✅ Supported | Tested. PPA via codename mapping to noble, DEB822 |
 
-* **Client (all platforms):** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** — full-featured VPN client with AWG 2.0. Import via `vpn://` URI.
-* **Client (Windows):** [AmneziaWG](https://github.com/amnezia-vpn/amneziawg-windows-client/releases) **>= 2.0.0** — lightweight tunnel manager with AWG 2.0. Import via `.conf` files.
-    > ⚠️ **IMPORTANT:** If you use a **non-standard SSH port** (other than 22), you **MUST** add a rule `sudo ufw allow YOUR_PORT/tcp` **BEFORE** running the installer!
+> ⚠️ **Non-standard SSH port:** If SSH is not on port 22, run `sudo ufw allow YOUR_PORT/tcp` **before** starting the installer, otherwise you will lose access to the server.
+
+**Clients:**
+* **All platforms:** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** — full-featured VPN client with AWG 2.0. Import via `vpn://` URI
+* **Windows:** [AmneziaWG](https://github.com/amnezia-vpn/amneziawg-windows-client/releases) **>= 2.0.0** — lightweight tunnel manager with AWG 2.0. Import via `.conf` files
 
 ---
 
@@ -132,26 +152,26 @@ This installation method ensures correct handling of interactive prompts and col
 
 2.  **Download the script:**
     ```bash
-    wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
-    # or: curl -fLo install_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
+    wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg_en.sh
+    # or: curl -fLo install_amneziawg_en.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg_en.sh
     ```
 3.  **Make it executable:**
     ```bash
-    chmod +x install_amneziawg.sh
+    chmod +x install_amneziawg_en.sh
     ```
 4.  **Run with `sudo`:**
     ```bash
-    sudo bash ./install_amneziawg.sh
+    sudo bash ./install_amneziawg_en.sh
     ```
-    *(You can also pass command-line parameters, see `sudo bash ./install_amneziawg.sh --help` or [ADVANCED.en.md#install-cli-adv](ADVANCED.en.md#install-cli-adv))*
+    *(You can also pass command-line parameters, see `sudo bash ./install_amneziawg_en.sh --help` or [ADVANCED.en.md#install-cli-adv](ADVANCED.en.md#install-cli-adv))*
 
-    > **English version:** If you prefer English output during installation:
+    > **Russian version:** For Russian output, use `install_amneziawg.sh`:
     > ```bash
-    > wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg_en.sh
-    > sudo bash ./install_amneziawg_en.sh
+    > wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
+    > sudo bash ./install_amneziawg.sh
     > ```
-    > The English version is functionally identical; only user-facing messages and logs are in English.
-    > After reboots, resume with the same file: `sudo bash ./install_amneziawg_en.sh`
+    > The Russian version is functionally identical; only user-facing messages and logs are in Russian.
+    > After reboots, resume with the same file: `sudo bash ./install_amneziawg.sh`
 
 5.  **Initial setup:** The script will interactively ask for:
     * **UDP port:** Port for client connections (1024-65535). Default: `39743`.
@@ -165,22 +185,63 @@ This installation method ensures correct handling of interactive prompts and col
 
 7.  **Resume:** After each reboot, **run the script again** with the same command:
     ```bash
-    sudo bash ./install_amneziawg.sh
+    sudo bash ./install_amneziawg_en.sh
     ```
     The script will automatically resume from where it left off **without repeating any prompts**.
 
 8.  **Completion:** After the second reboot and the third script run, you will see the message:
     `AmneziaWG 2.0 installation and configuration completed SUCCESSFULLY!`
 
-**File locations:**
+---
 
-* Working directory, logs, client files: `/root/awg/`
+<a id="after-installation"></a>
+## 📦 After installation
+
+**Where to find client files:**
+
+| File | Path | Purpose |
+|------|------|---------|
+| `.conf` | `/root/awg/name.conf` | Configuration for client import |
+| `.png` | `/root/awg/name.png` | QR code for mobile devices |
+| `.vpnuri` | `/root/awg/name.vpnuri` | `vpn://` URI for Amnezia Client |
+
+**Download config to your computer:**
+
+```bash
+scp root@SERVER_IP:/root/awg/my_phone.conf .
+```
+
+<details>
+<summary><strong>Import into Amnezia VPN (phone) via vpn:// URI</strong></summary>
+
+1. On the server, run: `cat /root/awg/my_phone.vpnuri`
+2. Copy the text and send it to yourself (Telegram, email, etc.)
+3. On your phone: Amnezia VPN → "Add VPN" → "Paste from clipboard"
+</details>
+
+<details>
+<summary><strong>Import via QR code</strong></summary>
+
+1. Download the QR code: `scp root@SERVER_IP:/root/awg/my_phone.png .`
+2. Open the file on your computer screen
+3. On your phone: Amnezia VPN → "Add VPN" → "Scan QR code"
+</details>
+
+<details>
+<summary><strong>Import into AmneziaWG for Windows</strong></summary>
+
+1. Download the `.conf` file to your computer via `scp` or `sftp`
+2. AmneziaWG → Import tunnel(s) from file → select the `.conf` file
+</details>
+
+**Other files on the server:**
+
 * Server configuration: `/etc/amnezia/amneziawg/awg0.conf`
-* Script settings file: `/root/awg/awgsetup_cfg.init`
+* Script settings: `/root/awg/awgsetup_cfg.init`
 * Management script: `/root/awg/manage_amneziawg.sh`
 * Shared functions: `/root/awg/awg_common.sh`
-* vpn:// URI files: `/root/awg/*.vpnuri`
 * Client expiry data: `/root/awg/expiry/`
+* Logs: `/root/awg/*.log`
 
 ---
 
@@ -213,18 +274,16 @@ sudo bash /root/awg/manage_amneziawg.sh <command> [arguments]
 
 > **💡 Note:** `add` and `remove` commands auto-apply changes via `awg syncconf` — no service restart needed.
 
-**Getting client files:** The `.conf` and `.png` files are located in `/root/awg/`. Use `scp`, `sftp`, or any other secure method to copy them.
-
 ### 📌 Quick Reference
 
 ```bash
-# Installation (Russian)
-wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
-sudo bash ./install_amneziawg.sh          # Run (+ 2 reboots)
-
 # Installation (English)
 wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg_en.sh
 sudo bash ./install_amneziawg_en.sh       # Run (+ 2 reboots)
+
+# Installation (Russian)
+wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/install_amneziawg.sh
+sudo bash ./install_amneziawg.sh          # Run (+ 2 reboots)
 
 # Client management
 sudo bash /root/awg/manage_amneziawg.sh add my_phone       # Add
@@ -288,14 +347,14 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
   <summary><strong>Q: How do I update the scripts to a newer version?</strong></summary>
   <b>A:</b> Download the updated scripts and replace them on the server:
   <pre>
-  # Russian version:
-  wget -O /root/awg/manage_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/manage_amneziawg.sh
-  wget -O /root/awg/awg_common.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/awg_common.sh
-  chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
-
   # English version:
   wget -O /root/awg/manage_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/manage_amneziawg_en.sh
   wget -O /root/awg/awg_common.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/awg_common_en.sh
+  chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
+
+  # Russian version:
+  wget -O /root/awg/manage_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/manage_amneziawg.sh
+  wget -O /root/awg/awg_common.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/main/awg_common.sh
   chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
   </pre>
   Server reinstallation is not required.
@@ -324,6 +383,16 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 <details>
   <summary><strong>Q: What are .vpnuri files?</strong></summary>
   <b>A:</b> <code>.vpnuri</code> files contain <code>vpn://</code> URIs for one-tap config import into Amnezia Client. Copy the file contents → open Amnezia Client → "Add VPN" → "Paste from clipboard".
+</details>
+
+<details>
+  <summary><strong>Q: Why port 39743?</strong></summary>
+  <b>A:</b> It's a random port from the upper range, chosen as the default. You can change it during installation: <code>--port=XXXXX</code> (any port 1024-65535).
+</details>
+
+<details>
+  <summary><strong>Q: Is Perl required on the server?</strong></summary>
+  <b>A:</b> Perl is used optionally for generating <code>vpn://</code> URIs (<code>.vpnuri</code> files). If Perl is absent, <code>.conf</code> files are still created normally — you can use them via file import or QR code. Perl is installed by default on Ubuntu and Debian.
 </details>
 
 > More answers and solutions in **[ADVANCED.en.md](ADVANCED.en.md)**.
