@@ -3,7 +3,7 @@
 # ==============================================================================
 # Общая библиотека функций для AmneziaWG 2.0
 # Автор: @bivlked
-# Версия: 5.7.4
+# Версия: 5.7.5
 # Дата: 2026-03-20
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
@@ -19,7 +19,7 @@ CONFIG_FILE="${CONFIG_FILE:-$AWG_DIR/awgsetup_cfg.init}"
 SERVER_CONF_FILE="${SERVER_CONF_FILE:-/etc/amnezia/amneziawg/awg0.conf}"
 KEYS_DIR="${KEYS_DIR:-$AWG_DIR/keys}"
 # shellcheck disable=SC2034
-AWG_COMMON_VERSION="5.7.4"
+AWG_COMMON_VERSION="5.7.5"
 
 # --- Автоочистка временных файлов ---
 # ВАЖНО: trap НЕ устанавливается здесь, чтобы не перезаписать trap вызывающего скрипта.
@@ -359,14 +359,14 @@ EOF
 # Fallback на полный перезапуск при ошибке
 apply_config() {
     local strip_out rc
-    strip_out=$(awg-quick strip awg0 2>/dev/null) || {
-        log_warn "awg-quick strip не удался, использую полный перезапуск."
+    strip_out=$(timeout 10 awg-quick strip awg0 2>/dev/null) || {
+        log_warn "awg-quick strip не удался или timeout, использую полный перезапуск."
         systemctl restart awg-quick@awg0 2>/dev/null; rc=$?
         [[ $rc -ne 0 ]] && log_warn "Ошибка перезапуска."
         return $rc
     }
-    echo "$strip_out" | awg syncconf awg0 /dev/stdin 2>/dev/null || {
-        log_warn "awg syncconf не удался, использую полный перезапуск."
+    echo "$strip_out" | timeout 10 awg syncconf awg0 /dev/stdin 2>/dev/null || {
+        log_warn "awg syncconf не удался или timeout, использую полный перезапуск."
         systemctl restart awg-quick@awg0 2>/dev/null; rc=$?
         [[ $rc -ne 0 ]] && log_warn "Ошибка перезапуска."
         return $rc
@@ -524,6 +524,11 @@ remove_peer_from_server() {
         if (buf != "" && !is_target) printf "%s", buf
     }
     ' "$SERVER_CONF_FILE" > "$tmpfile"
+
+    # Нормализация: сжать множественные пустые строки в одну
+    local tmpclean
+    tmpclean=$(awg_mktemp) || { log_error "Ошибка mktemp"; exec {lock_fd}>&-; return 1; }
+    cat -s "$tmpfile" > "$tmpclean" && mv "$tmpclean" "$tmpfile"
 
     if ! mv "$tmpfile" "$SERVER_CONF_FILE"; then
         rm -f "$tmpfile"

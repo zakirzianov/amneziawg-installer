@@ -3,7 +3,7 @@
 # ==============================================================================
 # Shared function library for AmneziaWG 2.0
 # Author: @bivlked
-# Version: 5.7.4
+# Version: 5.7.5
 # Date: 2026-03-20
 # Repository: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
@@ -19,7 +19,7 @@ CONFIG_FILE="${CONFIG_FILE:-$AWG_DIR/awgsetup_cfg.init}"
 SERVER_CONF_FILE="${SERVER_CONF_FILE:-/etc/amnezia/amneziawg/awg0.conf}"
 KEYS_DIR="${KEYS_DIR:-$AWG_DIR/keys}"
 # shellcheck disable=SC2034
-AWG_COMMON_VERSION="5.7.4"
+AWG_COMMON_VERSION="5.7.5"
 
 # --- Auto-cleanup of temporary files ---
 # NOTE: trap is NOT set here to avoid overwriting the caller's trap handler.
@@ -359,14 +359,14 @@ EOF
 # Falls back to full restart on error
 apply_config() {
     local strip_out rc
-    strip_out=$(awg-quick strip awg0 2>/dev/null) || {
-        log_warn "awg-quick strip failed, falling back to full restart."
+    strip_out=$(timeout 10 awg-quick strip awg0 2>/dev/null) || {
+        log_warn "awg-quick strip failed or timed out, falling back to full restart."
         systemctl restart awg-quick@awg0 2>/dev/null; rc=$?
         [[ $rc -ne 0 ]] && log_warn "Service restart error."
         return $rc
     }
-    echo "$strip_out" | awg syncconf awg0 /dev/stdin 2>/dev/null || {
-        log_warn "awg syncconf failed, falling back to full restart."
+    echo "$strip_out" | timeout 10 awg syncconf awg0 /dev/stdin 2>/dev/null || {
+        log_warn "awg syncconf failed or timed out, falling back to full restart."
         systemctl restart awg-quick@awg0 2>/dev/null; rc=$?
         [[ $rc -ne 0 ]] && log_warn "Service restart error."
         return $rc
@@ -524,6 +524,11 @@ remove_peer_from_server() {
         if (buf != "" && !is_target) printf "%s", buf
     }
     ' "$SERVER_CONF_FILE" > "$tmpfile"
+
+    # Normalize: squeeze multiple blank lines into one
+    local tmpclean
+    tmpclean=$(awg_mktemp) || { log_error "mktemp failed"; exec {lock_fd}>&-; return 1; }
+    cat -s "$tmpfile" > "$tmpclean" && mv "$tmpclean" "$tmpfile"
 
     if ! mv "$tmpfile" "$SERVER_CONF_FILE"; then
         rm -f "$tmpfile"

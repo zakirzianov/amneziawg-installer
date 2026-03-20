@@ -14,6 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.7.5] — 2026-03-20
+
+### Fixed
+
+- **Trailing newlines in awg0.conf (#27):** Multiple blank lines accumulated in the server config after peer removals. Added normalization via `cat -s` on each remove.
+- **Timeout for awg syncconf (#27):** `awg-quick strip` and `awg syncconf` are now called with `timeout 10`. On hang (upstream deadlock [amneziawg-linux-kernel-module#146](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/issues/146)), the script falls back to a full service restart instead of waiting indefinitely.
+
+---
+
 ## [5.7.4] — 2026-03-20
 
 ### Fixed

@@ -14,6 +14,15 @@
 
 ---
 
+## [5.7.5] — 2026-03-20
+
+### Исправлено
+
+- **Trailing newlines в awg0.conf (#27):** После удаления пиров в серверном конфиге накапливались множественные пустые строки. Добавлена нормализация через `cat -s` при каждом remove.
+- **Timeout для awg syncconf (#27):** `awg-quick strip` и `awg syncconf` теперь вызываются с `timeout 10`. При зависании (upstream deadlock [amneziawg-linux-kernel-module#146](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/issues/146)) скрипт делает fallback на полный перезапуск сервиса вместо бесконечного ожидания.
+
+---
+
 ## [5.7.4] — 2026-03-20
 
 ### Исправлено
