@@ -713,7 +713,7 @@ usage() {
     echo "  -v, --verbose         Verbose output (for list command)"
     echo "  --no-color            Disable colored output"
     echo "  --json                JSON output (for stats command)"
-    echo "  --expires=DURATION    Expiry time for add (1h, 12h, 1d, 7d, 30d)"
+    echo "  --expires=DURATION    Expiry time for add (1h, 12h, 1d, 7d, 30d, 4w)"
     echo "  --conf-dir=PATH       Specify AWG directory (default: $AWG_DIR)"
     echo "  --server-conf=PATH    Specify server config file"
     echo ""

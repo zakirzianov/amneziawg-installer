@@ -17,7 +17,7 @@
   <img src="https://img.shields.io/badge/Debian-12_|_13-A81D33" alt="Debian 12 | 13">
   <a href="https://github.com/bivlked/amneziawg-installer/blob/main/LICENSE"><img src="https://img.shields.io/github/license/bivlked/amneziawg-installer" alt="License"></a>
   <img src="https://img.shields.io/badge/Status-Stable-success" alt="Status">
-  <a href="https://github.com/bivlked/amneziawg-installer/releases"><img src="https://img.shields.io/badge/Installer_Version-5.7.3-blue" alt="Version"></a>
+  <a href="https://github.com/bivlked/amneziawg-installer/releases"><img src="https://img.shields.io/badge/Installer_Version-5.7.4-blue" alt="Version"></a>
   <img src="https://img.shields.io/badge/AmneziaWG-2.0-blueviolet" alt="AWG 2.0">
   <a href="https://github.com/bivlked/amneziawg-installer/actions/workflows/shellcheck.yml"><img src="https://github.com/bivlked/amneziawg-installer/actions/workflows/shellcheck.yml/badge.svg" alt="ShellCheck"></a>
   <a href="https://github.com/bivlked/amneziawg-installer/stargazers"><img src="https://img.shields.io/github/stars/bivlked/amneziawg-installer?style=flat" alt="Stars"></a>
@@ -120,8 +120,9 @@ All parameters are accepted automatically. Details: [ADVANCED.en.md#cli-params-a
 > ⚠️ **Non-standard SSH port:** If SSH is not on port 22, run `sudo ufw allow YOUR_PORT/tcp` **before** starting the installer, otherwise you will lose access to the server.
 
 **Clients:**
-* **All platforms:** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** — full-featured VPN client with AWG 2.0. Import via `vpn://` URI
-* **Windows:** [AmneziaWG](https://github.com/amnezia-vpn/amneziawg-windows-client/releases) **>= 2.0.0** — lightweight tunnel manager with AWG 2.0. Import via `.conf` files
+* **All platforms:** [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client/releases) **>= 4.8.12.7** — full-featured VPN client with AWG 2.0. Import via `vpn://` URI or `.conf` files
+
+> ⚠️ Standalone `amneziawg-windows-client` **does not support AWG 2.0** ("Invalid key: S3" error). Use Amnezia VPN instead. [Compatibility table →](ADVANCED.en.md#client-compat-adv)
 
 ---
 
@@ -326,7 +327,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 
 <details>
   <summary><strong>Q: How do I completely uninstall AmneziaWG?</strong></summary>
-  <b>A:</b> Download the installer script (if you don't have it) and run: <code>sudo bash ./install_amneziawg.sh --uninstall</code>.
+  <b>A:</b> Download the installer script (if you don't have it) and run: <code>sudo bash ./install_amneziawg_en.sh --uninstall</code>.
 </details>
 
 <details>
@@ -368,12 +369,12 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 
 <details>
   <summary><strong>Q: Which hosting providers work well?</strong></summary>
-  <b>A:</b> Any VPS with Ubuntu 24.04 / Debian 12 / Debian 13, root access, and at least 1 GB RAM. We recommend providers with clean (non-blacklisted) IPs and unlimited traffic. See our <a href="#hosting-recommendation">recommendation</a>.
+  <b>A:</b> Any VPS with Ubuntu 24.04 / Ubuntu 25.10 (⚠️) / Debian 12 / Debian 13, root access, and at least 1 GB RAM. We recommend providers with clean (non-blacklisted) IPs and unlimited traffic. See our <a href="#hosting-recommendation">recommendation</a>.
 </details>
 
 <details>
   <summary><strong>Q: How do I migrate the VPN to another server?</strong></summary>
-  <b>A:</b> 1. Create a backup: <code>sudo bash /root/awg/manage_amneziawg.sh backup</code>. 2. Copy the backup to the new server. 3. Install AmneziaWG on the new server. 4. Restore: <code>sudo bash /root/awg/manage_amneziawg.sh restore /path/to/backup.tar.gz</code>. 5. Regenerate configs: <code>sudo bash /root/awg/manage_amneziawg.sh regen</code>.
+  <b>A:</b> 1. Create a backup: <code>sudo bash /root/awg/manage_amneziawg.sh backup</code>. 2. Copy the archive from <code>/root/awg/backups/</code> to the new server. 3. Install AmneziaWG on the new server. 4. Restore: <code>sudo bash /root/awg/manage_amneziawg.sh restore</code> (interactive selection, or specify the full archive path). 5. Regenerate configs with new IP: <code>sudo bash /root/awg/manage_amneziawg.sh regen</code>.
 </details>
 
 <details>
@@ -417,7 +418,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 |---------|-------------|
 | [Junker](https://spatiumstas.github.io/junker/) | AmneziaWG signature generator by @spatiumstas — for manual setup without an installer script |
 | [Amnezia VPN Client](https://github.com/amnezia-vpn/amnezia-client) | Official client with AWG 2.0 support (>= 4.8.12.7) |
-| [AmneziaWG for Windows](https://github.com/amnezia-vpn/amneziawg-windows-client) | Lightweight tunnel manager for Windows with AWG 2.0 (>= 2.0.0) |
+| [AmneziaWG for Windows](https://github.com/amnezia-vpn/amneziawg-windows-client) | Lightweight tunnel manager for Windows (⚠️ AWG 1.x only) |
 | [AmneziaWG-Architect](https://vadim-khristenko.github.io/AmneziaWG-Architect/) | CPS/mimicry generator UI for AWG 2.0 by @Vadim-Khristenko ([GitHub](https://github.com/Vadim-Khristenko/AmneziaWG-Architect)) |
 
 ---

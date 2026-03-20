@@ -713,7 +713,7 @@ usage() {
     echo "  -v, --verbose         Расширенный вывод (для команды list)"
     echo "  --no-color            Отключить цветной вывод"
     echo "  --json                JSON-вывод (для команды stats)"
-    echo "  --expires=ВРЕМЯ       Срок действия при add (1h, 12h, 1d, 7d, 30d)"
+    echo "  --expires=ВРЕМЯ       Срок действия при add (1h, 12h, 1d, 7d, 30d, 4w)"
     echo "  --conf-dir=ПУТЬ       Указать директорию AWG (умолч: $AWG_DIR)"
     echo "  --server-conf=ПУТЬ    Указать файл конфига сервера"
     echo ""

@@ -81,7 +81,7 @@ All parameters are generated automatically during installation and saved to `/ro
 |-----------|-------------|-------|---------|
 | `Jc` | Number of junk packets | 4-8 | `6` |
 | `Jmin` | Min junk size (bytes) | 40-89 | `55` |
-| `Jmax` | Max junk size (bytes) | Jmin+100..Jmin+999 | `780` |
+| `Jmax` | Max junk size (bytes) | Jmin+100..Jmin+500 | `380` |
 | `S1` | Init message padding (bytes) | 15-150 | `72` |
 | `S2` | Response message padding (bytes) | 15-150, S1+56≠S2 | `56` |
 | `S3` | Cookie message padding (bytes) | 8-55 | `32` |
@@ -230,6 +230,7 @@ export AWG_I1='<r 128>'
 [Interface]
 PrivateKey = [SERVER_PRIVATE_KEY]
 Address = 10.9.9.1/24
+MTU = 1280
 ListenPort = 39743
 PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
@@ -261,6 +262,7 @@ AllowedIPs = 10.9.9.2/32
 PrivateKey = [CLIENT_PRIVATE_KEY]
 Address = 10.9.9.2/32
 DNS = 1.1.1.1
+MTU = 1280
 Jc = 6
 Jmin = 55
 Jmax = 780
@@ -483,7 +485,7 @@ chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
 
 <details>
   <summary><strong>Q: How do I change the MTU?</strong></summary>
-  <b>A:</b> Add a line <code>MTU = &lt;value&gt;</code> (e.g., <code>MTU = 1420</code>) to the <code>[Interface]</code> section of <code>/etc/amnezia/amneziawg/awg0.conf</code> and to client <code>.conf</code> files. Restart the service.
+  <b>A:</b> Starting with v5.7.4, <code>MTU = 1280</code> is set automatically. To change it: edit the <code>MTU = &lt;value&gt;</code> line in the <code>[Interface]</code> section of <code>/etc/amnezia/amneziawg/awg0.conf</code> and in client <code>.conf</code> files. Restart the service. See <a href="#mtu-mobile-adv">MTU and Mobile Clients</a> for details.
 </details>
 
 <details>
@@ -528,7 +530,7 @@ chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
 
 <details>
   <summary><strong>Q: Detailed steps for VPN migration to another server?</strong></summary>
-  <b>A:</b> 1. On the old server: <code>sudo bash /root/awg/manage_amneziawg.sh backup</code>. 2. Copy the archive: <code>scp root@old_server:/root/awg/backups/*.tar.gz .</code>. 3. Install AmneziaWG on the new server. 4. Copy the backup: <code>scp *.tar.gz root@new_server:/root/awg/</code>. 5. Restore: <code>sudo bash /root/awg/manage_amneziawg.sh restore /root/awg/backup.tar.gz</code>. 6. Regenerate configs with new IP: <code>sudo bash /root/awg/manage_amneziawg.sh regen</code>. 7. Distribute new configs to clients.
+  <b>A:</b> 1. On the old server: <code>sudo bash /root/awg/manage_amneziawg.sh backup</code>. 2. Copy the archive: <code>scp root@old_server:/root/awg/backups/awg_backup_*.tar.gz .</code>. 3. Install AmneziaWG on the new server. 4. Copy the backup: <code>scp awg_backup_*.tar.gz root@new_server:/root/awg/backups/</code>. 5. Restore: <code>sudo bash /root/awg/manage_amneziawg.sh restore</code> (interactive selection, or specify the full archive path). 6. Regenerate configs with new IP: <code>sudo bash /root/awg/manage_amneziawg.sh regen</code>. 7. Distribute new configs to clients.
 </details>
 
 <details>
@@ -708,35 +710,19 @@ When a client is created, a `.vpnuri` file is automatically generated with a `vp
 <a id="mtu-mobile-adv"></a>
 ## 📱 MTU and Mobile Clients
 
-Smartphones connecting over cellular networks can have issues: the connection establishes but traffic doesn't flow. iPhones are particularly affected and may fail to connect entirely.
+Starting with v5.7.4, `MTU = 1280` is set automatically in both server and client configs.
 
-**Causes:**
+**Why:** Cellular networks (4G/LTE) often have an effective MTU below the default 1420, causing packet fragmentation or drops. iOS is strict about Path MTU Discovery and may fail to connect. 1280 is the minimum IPv6 MTU (RFC 8200), guaranteed to pass through any network. The speed impact is negligible.
 
-1. **High tunnel MTU.** WireGuard defaults to MTU 1420. Cellular networks (4G/LTE) often have a lower effective MTU, causing packet fragmentation or drops. iOS is strict about Path MTU Discovery.
+**For installations before v5.7.4:**
 
-2. **Large junk packets.** The Jmax parameter can reach ~1000 bytes. Combined with MTU 1420 over cellular, packets may not get through.
-
-**Solution:**
-
-Add `MTU = 1280` to the `[Interface]` section of both server and client configs:
-
-```ini
-[Interface]
-PrivateKey = ...
-Address = 10.9.9.2/32
-DNS = 1.1.1.1
-MTU = 1280
-```
-
-1280 is the minimum IPv6 MTU (RFC 8200), guaranteed to pass through any network. The speed impact is minimal (slightly more packets due to smaller payload).
-
-> **Note:** vpn:// URIs for Amnezia Client already set MTU = 1280 by default. The issue only appears when using `.conf` files with the native AmneziaWG client on a smartphone.
-
-After changing MTU, restart the service:
+Add `MTU = 1280` to the `[Interface]` section of both server and client configs manually. Restart the service:
 
 ```bash
 sudo systemctl restart awg-quick@awg0
 ```
+
+> vpn:// URIs for Amnezia Client have always included MTU = 1280 in all script versions.
 
 ---
 
@@ -768,7 +754,7 @@ Starting with v5.6.0, the installer fully supports Debian 12 (bookworm) and Debi
 | Aspect | Ubuntu 24.04 | Debian 12 (bookworm) | Debian 13 (trixie) |
 |--------|-------------|---------------------|-------------------|
 | PPA codename | native | mapped to `focal` | mapped to `noble` |
-| APT format | `.list` | `.list` | DEB822 `.sources` |
+| APT format | DEB822 `.sources` | `.list` | DEB822 `.sources` |
 | Headers | `linux-headers-$(uname -r)` | fallback to `linux-headers-amd64` | fallback to `linux-headers-amd64` |
 | deb-src | Yes | No | No |
 | snapd/lxd cleanup | Yes | Skipped | Skipped |
@@ -793,8 +779,6 @@ During installation on Debian, you may see a `sudo removal refused` warning — 
 * **LXC containers are not supported.** AmneziaWG requires a kernel module (DKMS). LXC shares the host kernel — loading a custom module from inside a container is not possible. Use a full VM or bare-metal server.
 
 * **Assumes a dedicated server.** The script configures UFW, Fail2Ban, sysctl and optimizes the system for VPN. On servers running other services, use `--no-tweaks` to skip hardening.
-
-* **MTU is not set in .conf by default.** For mobile clients, manually add `MTU = 1280` (see [MTU and Mobile Clients](#mtu-mobile-adv)).
 
 * **Single AWG protocol version per server.** All clients share the same obfuscation parameters. You cannot have some clients on AWG 1.x and others on 2.0 simultaneously.
 
