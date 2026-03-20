@@ -430,12 +430,12 @@ Ensures automatic rebuilding of the `amneziawg` kernel module on kernel updates.
 
 Client keys are stored in `/root/awg/keys/` (permissions 600). Server keys are in `/root/awg/server_private.key` and `server_public.key`.
 
-#### Version-Pinned URLs (v5.7.3)
+#### Version-Pinned URLs (v5.7.4)
 
 The installer downloads `awg_common.sh` and `manage_amneziawg.sh` from URLs pinned to the specific version tag:
 
 ```
-https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.7.3/awg_common.sh
+https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.7.4/awg_common.sh
 ```
 
 This provides **supply chain pinning** — ensuring downloaded scripts match the installer version, even if `main` has already been updated.

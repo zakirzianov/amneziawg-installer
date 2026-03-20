@@ -430,12 +430,12 @@ graph TD
 
 Ключи клиентов хранятся в `/root/awg/keys/` (права 600). Серверные ключи — в `/root/awg/server_private.key` и `server_public.key`.
 
-#### Привязка URL к версии (v5.7.3)
+#### Привязка URL к версии (v5.7.4)
 
 Инсталлятор скачивает `awg_common.sh` и `manage_amneziawg.sh` с URL, привязанных к конкретному тегу версии:
 
 ```
-https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.7.3/awg_common.sh
+https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.7.4/awg_common.sh
 ```
 
 Это обеспечивает **supply chain pinning** — гарантию, что скачиваемые скрипты соответствуют версии инсталлятора, даже если `main` уже обновлён.
