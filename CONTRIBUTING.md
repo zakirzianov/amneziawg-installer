@@ -112,9 +112,11 @@ docs: update CHANGELOG for v5.5
 
 1. Fill in the PR template completely
 2. Ensure CI checks pass (ShellCheck + syntax)
-3. Request a review from `@bivlked`
-4. Address review feedback
-5. Once approved, the maintainer will merge
+3. Update **both** `CHANGELOG.md` and `CHANGELOG.en.md` if applicable
+4. Update `[Unreleased]` comparator link in both CHANGELOGs when bumping version
+5. Request a review from `@bivlked`
+6. Address review feedback
+7. Once approved, the maintainer will merge
 
 ## Questions?
 

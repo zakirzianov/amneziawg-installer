@@ -148,8 +148,8 @@
 <a id="ufw-adv"></a>
 ### Фаервол UFW
 
-* **Политики:** Deny incoming, Allow outgoing.
-* **Правила:** `limit 22/tcp` (SSH), `allow <порт_vpn>/udp`.
+* **Политики:** Deny incoming, Allow outgoing, Deny routed.
+* **Правила:** `limit 22/tcp` (SSH), `allow <порт_vpn>/udp`, `route allow in on awg0 out on <nic>` (маршрутизация VPN-трафика, добавлено в v5.7.6).
 * **Проверка:** `sudo ufw status verbose`
 
 <a id="sysctl-adv"></a>
@@ -174,7 +174,7 @@
 
 #### Безопасная загрузка конфигурации (v5.7.2)
 
-Начиная с v5.7.2, файл параметров `awgsetup_cfg.init` загружается через `safe_load_config()` — whitelist-парсер, который принимает только заранее определённые ключи (`AWG_*`, `OS_*`, `DISABLE_IPV6`, `ALLOWED_IPS_*`, `NO_TWEAKS` и др.). Прежний метод через `source` заменён полностью.
+Начиная с v5.7.2, файл параметров `awgsetup_cfg.init` загружается через `safe_load_config()` — whitelist-парсер, который принимает только заранее определённые ключи (`AWG_*`, `OS_*`, `DISABLE_IPV6`, `ALLOWED_IPS_*`, `NO_TWEAKS` и др.). Прежний метод через `source` заменён полностью. Парсер корректно обрабатывает значения как в одинарных, так и в двойных кавычках (`'value'` или `"value"`).
 
 Это защищает от потенциальной инъекции кода: даже если файл конфигурации будет модифицирован, произвольные команды не выполнятся.
 
@@ -232,7 +232,7 @@ PrivateKey = [SERVER_PRIVATE_KEY]
 Address = 10.9.9.1/24
 MTU = 1280
 ListenPort = 39743
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+PostUp = iptables -I FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 Jc = 6
 Jmin = 55

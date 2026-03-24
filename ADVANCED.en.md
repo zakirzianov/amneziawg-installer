@@ -148,8 +148,8 @@ To change the default DNS or PersistentKeepalive for **new** clients, edit the `
 <a id="ufw-adv"></a>
 ### UFW Firewall
 
-* **Policies:** Deny incoming, Allow outgoing.
-* **Rules:** `limit 22/tcp` (SSH), `allow <vpn_port>/udp`.
+* **Policies:** Deny incoming, Allow outgoing, Deny routed.
+* **Rules:** `limit 22/tcp` (SSH), `allow <vpn_port>/udp`, `route allow in on awg0 out on <nic>` (VPN traffic forwarding, added in v5.7.6).
 * **Check:** `sudo ufw status verbose`
 
 <a id="sysctl-adv"></a>
@@ -174,7 +174,7 @@ File: `/etc/sysctl.d/99-amneziawg-security.conf`. Includes:
 
 #### Safe Configuration Loading (v5.7.2)
 
-Starting with v5.7.2, the `awgsetup_cfg.init` parameters file is loaded via `safe_load_config()` — a whitelist parser that only accepts predefined keys (`AWG_*`, `OS_*`, `DISABLE_IPV6`, `ALLOWED_IPS_*`, `NO_TWEAKS`, etc.). The previous `source` method has been completely replaced.
+Starting with v5.7.2, the `awgsetup_cfg.init` parameters file is loaded via `safe_load_config()` — a whitelist parser that only accepts predefined keys (`AWG_*`, `OS_*`, `DISABLE_IPV6`, `ALLOWED_IPS_*`, `NO_TWEAKS`, etc.). The previous `source` method has been completely replaced. The parser correctly handles values in both single and double quotes (`'value'` or `"value"`).
 
 This protects against potential code injection: even if the configuration file is modified, arbitrary commands will not execute.
 
@@ -232,7 +232,7 @@ PrivateKey = [SERVER_PRIVATE_KEY]
 Address = 10.9.9.1/24
 MTU = 1280
 ListenPort = 39743
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+PostUp = iptables -I FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
 PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
 Jc = 6
 Jmin = 55

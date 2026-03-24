@@ -343,7 +343,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Diagnostic report (`--diagnostic`).
 - Full uninstall (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.3...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.7...HEAD
+[5.7.7]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.6...v5.7.7
+[5.7.6]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.5...v5.7.6
+[5.7.5]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.4...v5.7.5
+[5.7.4]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.3...v5.7.4
 [5.7.3]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.2...v5.7.3
 [5.7.2]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.1...v5.7.2
 [5.7.1]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.0...v5.7.1

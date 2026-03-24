@@ -398,6 +398,11 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
   <b>A:</b> Perl is used optionally for generating <code>vpn://</code> URIs (<code>.vpnuri</code> files). If Perl is absent, <code>.conf</code> files are still created normally — you can use them via file import or QR code. Perl is installed by default on Ubuntu and Debian.
 </details>
 
+<details>
+  <summary><strong>Q: Is it safe to re-run the installer?</strong></summary>
+  <b>A:</b> Yes. On re-run, the server config is recreated, but existing clients are automatically restored from backup. Default clients (<code>my_phone</code>, <code>my_laptop</code>) are recreated; all others are preserved.
+</details>
+
 > More answers and solutions in **[ADVANCED.en.md](ADVANCED.en.md)**.
 
 ---
