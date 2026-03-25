@@ -323,6 +323,7 @@ Options:
   --server-conf=PATH    Specify server config file
   --json                JSON output (for stats command)
   --expires=DURATION    Expiry duration for add (1h, 12h, 1d, 7d, 30d, 4w)
+  --apply-mode=MODE     syncconf (default) or restart (bypass kernel panic)
 ```
 
 ---

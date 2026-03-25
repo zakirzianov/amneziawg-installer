@@ -14,6 +14,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.7.9] — 2026-03-25
+
+### Added
+
+- **Config apply mode (#30):** New `--apply-mode=restart` option for `manage_amneziawg.sh`. Switches to full service restart instead of `awg syncconf` — bypasses upstream deadlock in amneziawg kernel module ([amneziawg-linux-kernel-module#146](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/issues/146)). Persists via `AWG_APPLY_MODE=restart` in `awgsetup_cfg.init`.
+
+---
+
 ## [5.7.8] — 2026-03-24
 
 ### Added
@@ -351,7 +359,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Diagnostic report (`--diagnostic`).
 - Full uninstall (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.8...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.9...HEAD
+[5.7.9]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.8...v5.7.9
 [5.7.8]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.7...v5.7.8
 [5.7.7]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.6...v5.7.7
 [5.7.6]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.5...v5.7.6

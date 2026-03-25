@@ -323,6 +323,7 @@ PersistentKeepalive = 33
   --server-conf=ПУТЬ    Указать файл конфига сервера
   --json                JSON-вывод (для команды stats)
   --expires=ВРЕМЯ       Срок действия при add (1h, 12h, 1d, 7d, 30d, 4w)
+  --apply-mode=РЕЖИМ    syncconf (умолч.) или restart (обход kernel panic)
 ```
 
 ---

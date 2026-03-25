@@ -14,6 +14,14 @@
 
 ---
 
+## [5.7.9] — 2026-03-25
+
+### Добавлено
+
+- **Режим применения конфигурации (#30):** Новая опция `--apply-mode=restart` для `manage_amneziawg.sh`. Позволяет переключиться на полный перезапуск сервиса вместо `awg syncconf` — обходит upstream deadlock в модуле amneziawg ([amneziawg-linux-kernel-module#146](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/issues/146)). Режим сохраняется в `awgsetup_cfg.init` (`AWG_APPLY_MODE=restart`).
+
+---
+
 ## [5.7.8] — 2026-03-24
 
 ### Добавлено
@@ -351,7 +359,8 @@
 - Диагностический отчет (`--diagnostic`).
 - Полная деинсталляция (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.8...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.9...HEAD
+[5.7.9]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.8...v5.7.9
 [5.7.8]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.7...v5.7.8
 [5.7.7]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.6...v5.7.7
 [5.7.6]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.5...v5.7.6
