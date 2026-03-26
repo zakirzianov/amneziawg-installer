@@ -743,6 +743,12 @@ Not all clients support AWG 2.0. Check compatibility before choosing a client:
 
 > If a client shows an error about an unknown parameter (S3, S4, I1, or H1 as a range), use one of the first four clients in the table.
 
+### Router Clients
+
+| Project | Platform | Description |
+|---------|----------|-------------|
+| [AWG Manager](https://github.com/hoaxisr/awg-manager) | Keenetic (Entware) | Web interface for managing AWG tunnels on Keenetic routers |
+
 ---
 
 <a id="debian-support-adv"></a>
