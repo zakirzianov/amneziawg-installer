@@ -14,6 +14,17 @@
 
 ---
 
+## [5.7.11] — 2026-03-31
+
+### Исправлено
+
+- **regen портит Address на Debian/mawk (#31):** `\s` в awk (PCRE-расширение) не поддерживается mawk. Заменено на `[ \t]`. Также `grep -oP` для приватного ключа заменён на POSIX-совместимый `sed`.
+- **regen теряет значения после modify (#31):** При перегенерации конфига пользовательские настройки (DNS, PersistentKeepalive, AllowedIPs), изменённые через `modify`, теперь сохраняются.
+- **modify оставляет .bak файлы (#31):** Бэкап-файл удаляется после успешного изменения.
+- **check не видит порт на Debian (#31):** `grep -qP` заменён на POSIX-совместимый `grep` во всех местах проверки порта.
+
+---
+
 ## [5.7.10] — 2026-03-31
 
 ### Добавлено
@@ -370,7 +381,8 @@
 - Диагностический отчет (`--diagnostic`).
 - Полная деинсталляция (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.10...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.11...HEAD
+[5.7.11]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.10...v5.7.11
 [5.7.10]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.9...v5.7.10
 [5.7.9]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.8...v5.7.9
 [5.7.8]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.7...v5.7.8

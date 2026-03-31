@@ -14,6 +14,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.7.11] — 2026-03-31
+
+### Fixed
+
+- **regen corrupts Address on Debian/mawk (#31):** `\s` in awk (PCRE extension) not supported by mawk. Replaced with `[ \t]`. Also replaced `grep -oP` with POSIX-compatible `sed` for private key extraction.
+- **regen loses values after modify (#31):** User settings (DNS, PersistentKeepalive, AllowedIPs) changed via `modify` are now preserved during config regeneration.
+- **modify leaves .bak files (#31):** Backup file is now deleted after successful parameter change.
+- **check fails to detect port on Debian (#31):** `grep -qP` replaced with POSIX-compatible `grep` in all 6 port-checking locations.
+
+---
+
 ## [5.7.10] — 2026-03-31
 
 ### Added
@@ -370,7 +381,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Diagnostic report (`--diagnostic`).
 - Full uninstall (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.10...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.11...HEAD
+[5.7.11]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.10...v5.7.11
 [5.7.10]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.9...v5.7.10
 [5.7.9]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.8...v5.7.9
 [5.7.8]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.7...v5.7.8
