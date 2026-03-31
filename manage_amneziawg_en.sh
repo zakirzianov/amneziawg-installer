@@ -789,7 +789,11 @@ case $COMMAND in
         if [[ $_added -gt 0 ]]; then
             [[ -n "${_CLI_APPLY_MODE:-}" ]] && export AWG_APPLY_MODE="$_CLI_APPLY_MODE"
             apply_config
-            log "Clients added: $_added. Configuration applied."
+            if [[ "${AWG_SKIP_APPLY:-0}" == "1" ]]; then
+                log "Clients added: $_added. Apply deferred (AWG_SKIP_APPLY=1)."
+            else
+                log "Clients added: $_added. Configuration applied."
+            fi
         fi
         ;;
 
@@ -836,7 +840,11 @@ case $COMMAND in
             if [[ $_removed -gt 0 ]]; then
                 [[ -n "${_CLI_APPLY_MODE:-}" ]] && export AWG_APPLY_MODE="$_CLI_APPLY_MODE"
                 apply_config
-                log "Clients removed: $_removed. Configuration applied."
+                if [[ "${AWG_SKIP_APPLY:-0}" == "1" ]]; then
+                    log "Clients removed: $_removed. Apply deferred (AWG_SKIP_APPLY=1)."
+                else
+                    log "Clients removed: $_removed. Configuration applied."
+                fi
             fi
         fi
         ;;
