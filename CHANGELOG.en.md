@@ -14,6 +14,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.7.13] — 2026-04-07
+
+### Security
+
+- **Russian DPI fingerprinting via static H1-H4 (Discussion #38):** The H1-H4 ranges in `generate_awg_params` were hardcoded identically across all installs (`100000-800000`, `1000000-8000000`, ...). Russian DPI fingerprinted this static signature — installs stopped working over Russian mobile carriers. H1-H4 are now randomized per install: 8 random uint32 values are sorted and grouped into 4 non-overlapping pairs. Every install gets unique ranges with no static signature. Thanks @Klavishnik (report) and @elvaleto (diagnosis).
+
+### Fixed
+
+- **`regen` did not update AWG parameters in client configs (#38):** `load_awg_params` only read AWG parameters from the cached `/root/awg/awgsetup_cfg.init`, not from the live `/etc/amnezia/amneziawg/awg0.conf`. If a user manually edited `awg0.conf` (for example, to change obfuscation parameters), `regen` produced client configs with stale values. `load_awg_params` now reads the live server config first, with the init file as a fallback. Added new function `load_awg_params_from_server_conf`.
+
+### Tests
+
+- 20 new bats tests: `test_h_ranges.bats` (9 H1-H4 generation checks) and `test_load_awg_params.bats` (11 awg0.conf parser and init-file priority checks). Total: 63 tests.
+
+---
+
 ## [5.7.12] — 2026-04-06
 
 ### Fixed
@@ -389,7 +405,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Diagnostic report (`--diagnostic`).
 - Full uninstall (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.12...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.13...HEAD
+[5.7.13]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.12...v5.7.13
 [5.7.12]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.11...v5.7.12
 [5.7.11]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.10...v5.7.11
 [5.7.10]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.9...v5.7.10

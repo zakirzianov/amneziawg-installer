@@ -14,6 +14,22 @@
 
 ---
 
+## [5.7.13] — 2026-04-07
+
+### Безопасность
+
+- **ТСПУ-фингерпринт по дефолтным H1-H4 (Discussion #38):** Диапазоны H1-H4 в `generate_awg_params` были захардкожены одинаковыми для всех установок (`100000-800000`, `1000000-8000000`, ...). Российский DPI зафингерпринтил эту статическую сигнатуру — установки переставали работать через мобильных операторов РФ. H1-H4 теперь рандомизируются при каждой установке: 8 случайных uint32 значений сортируются и группируются в 4 непересекающиеся пары. Каждая установка получает уникальные диапазоны без статической сигнатуры. Спасибо @Klavishnik (отчёт) и @elvaleto (диагностика).
+
+### Исправлено
+
+- **`regen` не обновлял AWG-параметры в клиентских конфигах (#38):** `load_awg_params` читал AWG-параметры только из закешированного `/root/awg/awgsetup_cfg.init`, а не из актуального `/etc/amnezia/amneziawg/awg0.conf`. Если пользователь правил `awg0.conf` руками (например, для смены параметров обфускации), `regen` генерировал клиентские конфиги со старыми значениями. Теперь `load_awg_params` приоритетно читает live серверный конфиг, init-файл используется как fallback. Добавлена новая функция `load_awg_params_from_server_conf`.
+
+### Тесты
+
+- 20 новых bats-тестов: `test_h_ranges.bats` (9 проверок генерации H1-H4) и `test_load_awg_params.bats` (11 проверок парсера awg0.conf и приоритета над init-файлом). Общий счёт: 63 теста.
+
+---
+
 ## [5.7.12] — 2026-04-06
 
 ### Исправлено
@@ -389,7 +405,8 @@
 - Диагностический отчет (`--diagnostic`).
 - Полная деинсталляция (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.12...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.13...HEAD
+[5.7.13]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.12...v5.7.13
 [5.7.12]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.11...v5.7.12
 [5.7.11]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.10...v5.7.11
 [5.7.10]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.9...v5.7.10
