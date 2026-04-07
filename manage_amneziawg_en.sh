@@ -293,8 +293,16 @@ restore_backup() {
     fi
 
     # Server keys
-    [[ -f "$td/server_private.key" ]] && cp -a "$td/server_private.key" "$AWG_DIR/"
-    [[ -f "$td/server_public.key" ]] && cp -a "$td/server_public.key" "$AWG_DIR/"
+    # Server keys: cp -a preserves the mode from the archive, so we force 600
+    # regardless of the mode they had inside the backup (Codex audit fix).
+    if [[ -f "$td/server_private.key" ]]; then
+        cp -a "$td/server_private.key" "$AWG_DIR/"
+        chmod 600 "$AWG_DIR/server_private.key" 2>/dev/null || true
+    fi
+    if [[ -f "$td/server_public.key" ]]; then
+        cp -a "$td/server_public.key" "$AWG_DIR/"
+        chmod 600 "$AWG_DIR/server_public.key" 2>/dev/null || true
+    fi
 
     if [[ -d "$td/expiry" ]]; then
         log "Restoring expiry data..."
@@ -789,11 +797,14 @@ case $COMMAND in
 
         if [[ $_added -gt 0 ]]; then
             [[ -n "${_CLI_APPLY_MODE:-}" ]] && export AWG_APPLY_MODE="$_CLI_APPLY_MODE"
-            apply_config
             if [[ "${AWG_SKIP_APPLY:-0}" == "1" ]]; then
+                apply_config
                 log "Clients added: $_added. Apply deferred (AWG_SKIP_APPLY=1)."
-            else
+            elif apply_config; then
                 log "Clients added: $_added. Configuration applied."
+            else
+                log_error "Clients added: $_added, but apply_config failed. Config written but NOT applied to live interface. Check: systemctl status awg-quick@awg0"
+                _cmd_rc=1
             fi
         fi
         ;;
@@ -840,11 +851,14 @@ case $COMMAND in
 
             if [[ $_removed -gt 0 ]]; then
                 [[ -n "${_CLI_APPLY_MODE:-}" ]] && export AWG_APPLY_MODE="$_CLI_APPLY_MODE"
-                apply_config
                 if [[ "${AWG_SKIP_APPLY:-0}" == "1" ]]; then
+                    apply_config
                     log "Clients removed: $_removed. Apply deferred (AWG_SKIP_APPLY=1)."
-                else
+                elif apply_config; then
                     log "Clients removed: $_removed. Configuration applied."
+                else
+                    log_error "Clients removed: $_removed, but apply_config failed. Peers removed from config but may still be present on live interface. Check: systemctl status awg-quick@awg0"
+                    _cmd_rc=1
                 fi
             fi
         fi

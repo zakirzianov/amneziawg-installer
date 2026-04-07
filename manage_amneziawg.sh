@@ -292,9 +292,16 @@ restore_backup() {
         log_debug "Ключи восстановлены в $KEYS_DIR"
     fi
 
-    # Серверные ключи
-    [[ -f "$td/server_private.key" ]] && cp -a "$td/server_private.key" "$AWG_DIR/"
-    [[ -f "$td/server_public.key" ]] && cp -a "$td/server_public.key" "$AWG_DIR/"
+    # Серверные ключи: cp -a сохраняет mode из архива, поэтому форсируем 600
+    # независимо от того с какими правами они лежали в backup-е (Codex audit fix).
+    if [[ -f "$td/server_private.key" ]]; then
+        cp -a "$td/server_private.key" "$AWG_DIR/"
+        chmod 600 "$AWG_DIR/server_private.key" 2>/dev/null || true
+    fi
+    if [[ -f "$td/server_public.key" ]]; then
+        cp -a "$td/server_public.key" "$AWG_DIR/"
+        chmod 600 "$AWG_DIR/server_public.key" 2>/dev/null || true
+    fi
 
     if [[ -d "$td/expiry" ]]; then
         log "Восстановление данных expiry..."
@@ -789,11 +796,15 @@ case $COMMAND in
 
         if [[ $_added -gt 0 ]]; then
             [[ -n "${_CLI_APPLY_MODE:-}" ]] && export AWG_APPLY_MODE="$_CLI_APPLY_MODE"
-            apply_config
             if [[ "${AWG_SKIP_APPLY:-0}" == "1" ]]; then
+                # apply_config сам залогирует и вернёт 0
+                apply_config
                 log "Добавлено клиентов: $_added. Применение отложено (AWG_SKIP_APPLY=1)."
-            else
+            elif apply_config; then
                 log "Добавлено клиентов: $_added. Конфигурация применена."
+            else
+                log_error "Добавлено клиентов: $_added, но apply_config упал. Конфиг записан, но НЕ применён к live интерфейсу. Проверьте: systemctl status awg-quick@awg0"
+                _cmd_rc=1
             fi
         fi
         ;;
@@ -840,11 +851,14 @@ case $COMMAND in
 
             if [[ $_removed -gt 0 ]]; then
                 [[ -n "${_CLI_APPLY_MODE:-}" ]] && export AWG_APPLY_MODE="$_CLI_APPLY_MODE"
-                apply_config
                 if [[ "${AWG_SKIP_APPLY:-0}" == "1" ]]; then
+                    apply_config
                     log "Удалено клиентов: $_removed. Применение отложено (AWG_SKIP_APPLY=1)."
-                else
+                elif apply_config; then
                     log "Удалено клиентов: $_removed. Конфигурация применена."
+                else
+                    log_error "Удалено клиентов: $_removed, но apply_config упал. Peer-ы убраны из конфига, но могут оставаться на live интерфейсе. Проверьте: systemctl status awg-quick@awg0"
+                    _cmd_rc=1
                 fi
             fi
         fi

@@ -1234,8 +1234,12 @@ check_expired_clients() {
 
     if [[ $removed -gt 0 ]]; then
         log "Удалено истёкших клиентов: $removed. Применение конфигурации..."
-        apply_config
+        if ! apply_config; then
+            log_error "apply_config упал после удаления истёкших клиентов. Peer-ы убраны из конфига и expiry/, но могут оставаться на live интерфейсе. Требуется ручной перезапуск: systemctl restart awg-quick@awg0"
+            return 1
+        fi
     fi
+    return 0
 }
 
 # Установка cron-задачи для автоудаления

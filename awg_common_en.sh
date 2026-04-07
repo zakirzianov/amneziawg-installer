@@ -1234,8 +1234,12 @@ check_expired_clients() {
 
     if [[ $removed -gt 0 ]]; then
         log "Expired clients removed: $removed. Applying config..."
-        apply_config
+        if ! apply_config; then
+            log_error "apply_config failed after removing expired clients. Peers removed from config and expiry/, but may still be present on live interface. Manual restart required: systemctl restart awg-quick@awg0"
+            return 1
+        fi
     fi
+    return 0
 }
 
 # Install cron job for auto-removal
