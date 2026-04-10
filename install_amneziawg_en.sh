@@ -29,6 +29,13 @@ COMMON_SCRIPT_PATH="$AWG_DIR/awg_common.sh"
 MANAGE_SCRIPT_URL="https://raw.githubusercontent.com/bivlked/amneziawg-installer/${AWG_BRANCH}/manage_amneziawg_en.sh"
 MANAGE_SCRIPT_PATH="$AWG_DIR/manage_amneziawg.sh"
 
+# SHA256 checksums of downloaded scripts. Updated at each release.
+# Verified in step5_download_scripts() after curl.
+# Verification is skipped when AWG_BRANCH is overridden (test branch).
+# Format: sha256sum output (hex, 64 chars).
+COMMON_SCRIPT_SHA256="RELEASE_PLACEHOLDER"
+MANAGE_SCRIPT_SHA256="RELEASE_PLACEHOLDER"
+
 # CLI flags
 UNINSTALL=0; HELP=0; DIAGNOSTIC=0; VERBOSE=0; NO_COLOR=0; AUTO_YES=0; NO_TWEAKS=0
 _APT_UPDATED=0
@@ -1703,6 +1710,32 @@ step4_setup_firewall() {
 # STEP 5: Downloading scripts (NO Python!)
 # ==============================================================================
 
+verify_sha256() {
+    local file="$1" expected="$2" label="$3"
+    # Skip verification when:
+    # - SHA is not set (RELEASE_PLACEHOLDER — release not yet published)
+    # - AWG_BRANCH is overridden (test branch)
+    if [[ "$expected" == "RELEASE_PLACEHOLDER" ]]; then
+        log_debug "SHA256 for $label: skipped (placeholder, pre-release)."
+        return 0
+    fi
+    if [[ "${AWG_BRANCH}" != "v${SCRIPT_VERSION}" ]]; then
+        log_debug "SHA256 for $label: skipped (AWG_BRANCH overridden: ${AWG_BRANCH})."
+        return 0
+    fi
+    local actual
+    actual=$(sha256sum "$file" 2>/dev/null | awk '{print $1}')
+    if [[ "$actual" != "$expected" ]]; then
+        log_error "SHA256 mismatch for $label!"
+        log_error "  Expected: $expected"
+        log_error "  Got:      $actual"
+        log_error "  File may have been tampered with. Re-download the installer from GitHub."
+        return 1
+    fi
+    log_debug "SHA256 $label: OK ($actual)"
+    return 0
+}
+
 step5_download_scripts() {
     update_state 5
     log "### STEP 5: Downloading management scripts ###"
@@ -1712,7 +1745,9 @@ step5_download_scripts() {
     log "Downloading $COMMON_SCRIPT_PATH..."
     if curl -fLso "$COMMON_SCRIPT_PATH" --max-time 60 --retry 2 "$COMMON_SCRIPT_URL"; then
         chmod 700 "$COMMON_SCRIPT_PATH" || die "chmod awg_common.sh error"
-        log "awg_common.sh downloaded."
+        verify_sha256 "$COMMON_SCRIPT_PATH" "$COMMON_SCRIPT_SHA256" "awg_common.sh" || \
+            die "awg_common.sh integrity check failed (SHA256 mismatch). Installation aborted."
+        log "awg_common.sh downloaded and verified."
     else
         die "awg_common.sh download error"
     fi
@@ -1721,7 +1756,9 @@ step5_download_scripts() {
     log "Downloading $MANAGE_SCRIPT_PATH..."
     if curl -fLso "$MANAGE_SCRIPT_PATH" --max-time 60 --retry 2 "$MANAGE_SCRIPT_URL"; then
         chmod 700 "$MANAGE_SCRIPT_PATH" || die "chmod manage_amneziawg.sh error"
-        log "manage_amneziawg.sh downloaded."
+        verify_sha256 "$MANAGE_SCRIPT_PATH" "$MANAGE_SCRIPT_SHA256" "manage_amneziawg.sh" || \
+            die "manage_amneziawg.sh integrity check failed (SHA256 mismatch). Installation aborted."
+        log "manage_amneziawg.sh downloaded and verified."
     else
         die "manage_amneziawg.sh download error"
     fi
