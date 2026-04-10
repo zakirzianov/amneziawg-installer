@@ -14,6 +14,31 @@
 
 ---
 
+## [5.8.3] — 2026-04-11
+
+Набор hardening-фиксов и точечных улучшений по мотивам [Issue #42](https://github.com/bivlked/amneziawg-installer/issues/42) и внутреннего аудита.
+
+### Безопасность
+
+- **Проверка целостности скачиваемых скриптов (SHA256).** `install_amneziawg.sh` в шаге 5 теперь считает `sha256sum` для `awg_common.sh` и `manage_amneziawg.sh` сразу после `curl` и сверяет с hardcoded значениями, которые обновляются при каждом релизе. При несовпадении — установка прерывается. Защита от подмены на транзитном узле или при компрометации raw.githubusercontent.com. Проверка автоматически пропускается если `AWG_BRANCH` переопределён пользователем для теста кастомной ветки.
+- **Валидация tar-архива перед распаковкой в `restore_backup`.** До распаковки скрипт читает список файлов через `tar -tzf` и отклоняет архив если внутри есть абсолютные пути (`/etc/...`) или path traversal (`..`). После распаковки — ищет symlinks в распакованном дереве и отклоняет архив при их наличии. Плюс `tar -xzf --no-same-owner` для гарантии того что владелец файлов — root, а не метаданные архива. Защита от crafted или подменённого бэкапа.
+
+### Исправлено
+
+- **Мобильный интернет — Yota/Tele2 блокировали VPN ([Issue #42](https://github.com/bivlked/amneziawg-installer/issues/42)).** @markmokrenko отчёт: после стандартной установки на Yota и Tele2 подключение не проходит, на Beeline работает. Диагноз: проблема в `Jmin`/`Jmax`. Это продолжение Discussion #38 — мобильные операторы чувствительны к размеру junk-пакетов. Снизили `Jmax` offset с `Jmin+100..500` до `Jmin+50..250`, максимальный размер junk-пакета упал с ~590 до ~340 байт. Обфускация сохранена, совместимость с мобильными улучшается.
+
+### Тесты
+
+- **4 новых bats-теста** для `restore_backup` tar-валидации: happy path (good backup), absolute path rejection, path traversal rejection, server key `chmod 600`. Всего **85 bats-тестов**, все PASS.
+
+### Live VPS-тесты
+
+Релиз проверен на чистом Ubuntu 24.04 LTS: 13/13 проверок пройдено. Tar-валидация отработала на трёх типах атак — path traversal, абсолютные пути, symlinks. Проверка SHA256 verify_sha256 отработала на корректной и некорректной hash. UFW routing cleanup при `--uninstall` подтверждён.
+
+> 📣 **Основной relnotes пакет для ветки 5.8.x** — в [v5.8.0 release notes](https://github.com/bivlked/amneziawg-installer/releases/tag/v5.8.0). v5.8.3 — hotfix поверх 5.8.2 с security hardening и Jmax range для мобильных сетей.
+
+---
+
 ## [5.8.2] — 2026-04-10
 
 ### Исправлено
@@ -489,7 +514,8 @@
 - Диагностический отчет (`--diagnostic`).
 - Полная деинсталляция (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.2...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.3...HEAD
+[5.8.3]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.2...v5.8.3
 [5.8.2]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.1...v5.8.2
 [5.8.1]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.0...v5.8.1
 [5.8.0]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.12...v5.8.0

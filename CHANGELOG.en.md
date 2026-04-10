@@ -14,6 +14,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.8.3] — 2026-04-11
+
+A batch of hardening fixes and targeted improvements following [Issue #42](https://github.com/bivlked/amneziawg-installer/issues/42) and an internal audit.
+
+### Security
+
+- **Downloaded script integrity check (SHA256).** `install_amneziawg.sh` in step 5 now computes `sha256sum` for `awg_common.sh` and `manage_amneziawg.sh` right after `curl` and compares the result to hardcoded values updated at each release. On mismatch the installer aborts. Protects against tampering on an intermediate hop or a compromise of raw.githubusercontent.com. Verification is automatically skipped when `AWG_BRANCH` is overridden by the user for testing a custom branch.
+- **Tar archive validation before extraction in `restore_backup`.** Before extraction the script reads the file list via `tar -tzf` and rejects the archive if it contains absolute paths (`/etc/...`) or path traversal (`..`). After extraction it scans the unpacked tree for symlinks and rejects the archive if any are found. Plus `tar -xzf --no-same-owner` to guarantee extracted files are owned by root rather than by metadata inside the archive. Protects against crafted or tampered backups.
+
+### Fixed
+
+- **Mobile internet — Yota/Tele2 blocked VPN ([Issue #42](https://github.com/bivlked/amneziawg-installer/issues/42)).** Reported by @markmokrenko: after a standard install the VPN fails to connect on Yota and Tele2, while Beeline works. Root cause: `Jmin`/`Jmax` values. This continues the Discussion #38 story — mobile carriers are sensitive to junk packet size. Lowered the `Jmax` offset from `Jmin+100..500` to `Jmin+50..250`, the maximum junk packet size drops from ~590 to ~340 bytes. Obfuscation strength is preserved, mobile compatibility improves.
+
+### Tests
+
+- **4 new bats tests** for `restore_backup` tar validation: happy path (good backup), absolute path rejection, path traversal rejection, server key `chmod 600`. Total: **85 bats tests**, all PASS.
+
+### Live VPS tests
+
+The release was validated on a clean Ubuntu 24.04 LTS: 13/13 checks passed. Tar validation was tested against three attack types — path traversal, absolute paths, symlinks. The SHA256 verify_sha256 function was tested with both correct and incorrect hash inputs. UFW routing cleanup during `--uninstall` was confirmed.
+
+> 📣 **The main release notes bundle for the 5.8.x branch** lives in [v5.8.0 release notes](https://github.com/bivlked/amneziawg-installer/releases/tag/v5.8.0). v5.8.3 is a hotfix on top of 5.8.2 with security hardening and a narrower Jmax range for mobile networks.
+
+---
+
 ## [5.8.2] — 2026-04-10
 
 ### Fixed
@@ -489,7 +514,8 @@ Major security and reliability update after several consecutive code audits. The
 - Diagnostic report (`--diagnostic`).
 - Full uninstall (`--uninstall`).
 
-[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.2...HEAD
+[Unreleased]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.3...HEAD
+[5.8.3]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.2...v5.8.3
 [5.8.2]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.1...v5.8.2
 [5.8.1]: https://github.com/bivlked/amneziawg-installer/compare/v5.8.0...v5.8.1
 [5.8.0]: https://github.com/bivlked/amneziawg-installer/compare/v5.7.12...v5.8.0
