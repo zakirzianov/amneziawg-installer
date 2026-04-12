@@ -566,6 +566,16 @@ chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
     <li>Раздайте обновлённые конфиги.</li>
   </ol>
   С v5.8.2 дефолтный Jc снижен с 4-8 до 3-6, что должно улучшить совместимость с мобильными из коробки. Если всё равно нестабильно — поставьте <code>Jc = 2</code> и <code>I1 = &lt;r 32&gt;</code>.
+  <br><br>
+  <b>Отчёты по операторам (из issues/discussions):</b>
+  <table>
+  <tr><th>Оператор</th><th>Параметры</th><th>Результат</th></tr>
+  <tr><td>Таттелеком (Летай)</td><td>Jc=3, I1=&lt;r 64&gt;</td><td>✅</td></tr>
+  <tr><td>Yota (Москва)</td><td>I1=&lt;b 0xce...&gt;, Jmax=261</td><td>✅</td></tr>
+  <tr><td>Yota/Tele2 (Москва)</td><td>Jc=3, Jmin=40, Jmax=70</td><td>✅</td></tr>
+  <tr><td>Beeline</td><td>дефолт v5.8.3</td><td>✅</td></tr>
+  <tr><td>Megafon (Москва)</td><td>Jc=3, Jmin=80, Jmax=268</td><td>❌ тестируется</td></tr>
+  </table>
 </details>
 
 <details>

@@ -566,6 +566,16 @@ chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
     <li>Redistribute updated configs.</li>
   </ol>
   As of v5.8.2 the default Jc has been lowered from 4-8 to 3-6, which should improve cellular compatibility out of the box. If it is still unstable — try <code>Jc = 2</code> and <code>I1 = &lt;r 32&gt;</code>.
+  <br><br>
+  <b>Carrier reports (from issues/discussions):</b>
+  <table>
+  <tr><th>Carrier</th><th>Parameters</th><th>Result</th></tr>
+  <tr><td>Tattelecom (Letai)</td><td>Jc=3, I1=&lt;r 64&gt;</td><td>✅</td></tr>
+  <tr><td>Yota (Moscow)</td><td>I1=&lt;b 0xce...&gt;, Jmax=261</td><td>✅</td></tr>
+  <tr><td>Yota/Tele2 (Moscow)</td><td>Jc=3, Jmin=40, Jmax=70</td><td>✅</td></tr>
+  <tr><td>Beeline</td><td>default v5.8.3</td><td>✅</td></tr>
+  <tr><td>Megafon (Moscow)</td><td>Jc=3, Jmin=80, Jmax=268</td><td>❌ testing</td></tr>
+  </table>
 </details>
 
 <details>
