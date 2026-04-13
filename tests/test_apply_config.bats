@@ -1,5 +1,10 @@
 #!/usr/bin/env bats
 # Tests for apply_config() modes in awg_common.sh
+#
+# NOTE: This file uses its own setup() (not just test_helper's) because it
+# needs to set up a $MOCK_BIN directory with stub systemctl/awg/awg-quick
+# and source awg_common.sh directly. test_helper is still loaded for helper
+# functions (require_flock etc.) but its setup() is overridden here.
 
 load test_helper
 
@@ -98,4 +103,39 @@ teardown() {
     run apply_config
     [ "$status" -eq 0 ]
     grep -q "awg-quick strip" "$AWG_DIR/.mock_calls"
+}
+
+@test "apply_config: flock failure returns 1" {
+    require_flock
+    # Mock flock to always return 1, simulating lock acquisition failure
+    # (e.g. timeout waiting for .awg_apply.lock held by another process).
+    # Precondition: $AWG_DIR exists (guaranteed by setup's TEST_DIR=$(mktemp -d)),
+    # so exec {apply_fd}>"$apply_lockfile" succeeds and the flock binary is called.
+    # apply_config() makes exactly one flock call; returning 1 here exercises
+    # the "! flock -x -w 120 $apply_fd → return 1" path in awg_common.sh.
+    cat > "$MOCK_BIN/flock" << 'STUB'
+#!/bin/bash
+exit 1
+STUB
+    chmod +x "$MOCK_BIN/flock"
+
+    export AWG_SKIP_APPLY=0
+    run apply_config
+    [ "$status" -eq 1 ]
+}
+
+@test "apply_config: systemctl restart failure returns non-zero" {
+    require_flock
+    # Override systemctl stub to exit 1 (simulate restart failure)
+    cat > "$MOCK_BIN/systemctl" << 'STUB'
+#!/bin/bash
+echo "systemctl $*" >> "${AWG_DIR}/.mock_calls"
+exit 1
+STUB
+    chmod +x "$MOCK_BIN/systemctl"
+
+    export AWG_SKIP_APPLY=0
+    export AWG_APPLY_MODE=restart
+    run apply_config
+    [ "$status" -ne 0 ]
 }

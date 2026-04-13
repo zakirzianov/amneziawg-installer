@@ -8,14 +8,14 @@ fi
 # ==============================================================================
 # Скрипт для управления пользователями (пирами) AmneziaWG 2.0
 # Автор: @bivlked
-# Версия: 5.8.3
-# Дата: 2026-04-11
+# Версия: 5.8.4
+# Дата: 2026-04-13
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Безопасный режим и Константы ---
 # shellcheck disable=SC2034
-SCRIPT_VERSION="5.8.3"
+SCRIPT_VERSION="5.8.4"
 set -o pipefail
 AWG_DIR="/root/awg"
 SERVER_CONF_FILE="/etc/amnezia/amneziawg/awg0.conf"
@@ -200,7 +200,9 @@ check_dependencies() {
 # Резервное копирование
 # ==============================================================================
 
-backup_configs() {
+# Внутренняя функция: выполняет бэкап без захвата блокировки.
+# Вызывается только из контекста, где .awg_backup.lock уже удерживается.
+_backup_configs_nolock() {
     log "Создание бэкапа..."
     local bd="$AWG_DIR/backups"
     mkdir -p "$bd" || die "Ошибка mkdir $bd"
@@ -231,6 +233,21 @@ backup_configs() {
         log_warn "Ошибка удаления старых бэкапов"
 
     log "Бэкап создан: $bf"
+}
+
+backup_configs() {
+    local backup_lockfile="${AWG_DIR}/.awg_backup.lock"
+    local backup_lock_fd
+    exec {backup_lock_fd}>"$backup_lockfile"
+    if ! flock -x -w 30 "$backup_lock_fd"; then
+        log_error "Таймаут ожидания блокировки backup (30 сек). Другая операция backup/restore уже запущена."
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
+    _backup_configs_nolock
+    local _rc=$?
+    exec {backup_lock_fd}>&-
+    return "$_rc"
 }
 
 restore_backup() {
@@ -269,21 +286,79 @@ restore_backup() {
     log "Восстановление из $bf"
     if ! confirm_action "восстановить" "конфигурацию из '$bf'"; then return 1; fi
 
-    log "Создание бэкапа текущей..."
-    backup_configs
+    # Захват блокировки backup (внешняя) — предотвращает параллельные backup/restore
+    local backup_lockfile="${AWG_DIR}/.awg_backup.lock"
+    local backup_lock_fd
+    exec {backup_lock_fd}>"$backup_lockfile"
+    if ! flock -x -w 30 "$backup_lock_fd"; then
+        log_error "Таймаут ожидания блокировки backup (30 сек). Другая операция backup/restore уже запущена."
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
 
-    local td restore_errors=0
-    td=$(manage_mktempdir) || { log_error "Ошибка создания временной директории"; return 1; }
+    # Захват блокировки конфига (внутренняя) — предотвращает изменение конфига во время restore
+    local config_lockfile="${AWG_DIR}/.awg_config.lock"
+    local config_lock_fd
+    exec {config_lock_fd}>"$config_lockfile"
+    if ! flock -x -w 30 "$config_lock_fd"; then
+        log_error "Таймаут ожидания блокировки конфига (30 сек)."
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
+
+    log "Создание бэкапа текущей..."
+    if ! _backup_configs_nolock; then
+        log_error "Не удалось создать бэкап текущей конфигурации."
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
+
+    local td
+    td=$(manage_mktempdir) || {
+        log_error "Ошибка создания временной директории"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    }
 
     # Pre-extraction валидация: проверяем содержимое tar до распаковки.
     # Defense-in-depth: наш threat model (root-only локальные бэкапы) делает
     # эксплуатацию маловероятной, но crafted или подменённый архив мог бы
     # использовать path traversal (../), абсолютные пути, symlinks или device
     # файлы для перезаписи произвольных системных файлов при распаковке от root.
+
+    # Проверка типов через verbose listing: отклоняем block/char/FIFO/hardlink
+    local _tar_verbose _vline _tc
+    _tar_verbose=$(tar -tvzf "$bf" 2>/dev/null) || {
+        log_error "Не удалось прочитать содержимое архива $bf"
+        rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    }
+    while IFS= read -r _vline; do
+        [[ -z "$_vline" ]] && continue
+        _tc="${_vline:0:1}"
+        case "$_tc" in
+            b|c|p|h|l)
+                log_error "Архив содержит опасный тип файла ('${_tc}'): '${_vline}' — восстановление отменено."
+                rm -rf "$td"
+                exec {config_lock_fd}>&-
+                exec {backup_lock_fd}>&-
+                return 1
+                ;;
+        esac
+    done <<< "$_tar_verbose"
+
+    # Проверка путей: абсолютные пути и path traversal
     local _tar_list _bad_entry
     _tar_list=$(tar -tzf "$bf" 2>/dev/null) || {
         log_error "Не удалось прочитать содержимое архива $bf"
         rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
         return 1
     }
     while IFS= read -r _bad_entry; do
@@ -292,20 +367,26 @@ restore_backup() {
         if [[ "$_bad_entry" == /* ]]; then
             log_error "Архив содержит абсолютный путь: '$_bad_entry' — восстановление отменено."
             rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
             return 1
         fi
         # Parent directory traversal
         if [[ "$_bad_entry" == *..* ]]; then
             log_error "Архив содержит path traversal (..): '$_bad_entry' — восстановление отменено."
             rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
             return 1
         fi
     done <<< "$_tar_list"
     log_debug "Pre-extraction проверка пройдена: $(echo "$_tar_list" | wc -l) файлов в архиве."
 
-    if ! tar -xzf "$bf" --no-same-owner -C "$td"; then
+    if ! tar -xzf "$bf" --no-same-owner --no-same-permissions -C "$td"; then
         log_error "Ошибка tar $bf"
         rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
         return 1
     fi
 
@@ -316,6 +397,8 @@ restore_backup() {
         log_error "Архив содержит symlinks (возможная symlink attack):"
         while IFS= read -r _sl; do log_error "  $_sl → $(readlink "$_sl")"; done <<< "$_symlinks"
         rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
         return 1
     fi
 
@@ -327,7 +410,13 @@ restore_backup() {
         local server_conf_dir
         server_conf_dir=$(dirname "$SERVER_CONF_FILE")
         mkdir -p "$server_conf_dir"
-        cp -a "$td/server/"* "$server_conf_dir/" || { log_error "Ошибка копирования server"; restore_errors=1; }
+        cp -a "$td/server/"* "$server_conf_dir/" || {
+            log_error "Ошибка копирования server — восстановление прервано."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$server_conf_dir"/*.conf 2>/dev/null
         chmod 700 "$server_conf_dir"
         log_debug "Конфиг сервера восстановлен в $server_conf_dir"
@@ -335,7 +424,13 @@ restore_backup() {
 
     if [[ -d "$td/clients" ]]; then
         log "Восстановление файлов клиентов..."
-        cp -a "$td/clients/"* "$AWG_DIR/" || { log_error "Ошибка копирования clients"; restore_errors=1; }
+        cp -a "$td/clients/"* "$AWG_DIR/" || {
+            log_error "Ошибка копирования clients — восстановление прервано."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$AWG_DIR"/*.conf 2>/dev/null
         chmod 600 "$CONFIG_FILE" 2>/dev/null
         log_debug "Файлы клиентов восстановлены в $AWG_DIR"
@@ -344,7 +439,13 @@ restore_backup() {
     if [[ -d "$td/keys" ]]; then
         log "Восстановление ключей..."
         mkdir -p "$KEYS_DIR"
-        cp -a "$td/keys/"* "$KEYS_DIR/" || { log_error "Ошибка копирования keys"; restore_errors=1; }
+        cp -a "$td/keys/"* "$KEYS_DIR/" || {
+            log_error "Ошибка копирования keys — восстановление прервано."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$KEYS_DIR"/* 2>/dev/null
         log_debug "Ключи восстановлены в $KEYS_DIR"
     fi
@@ -352,11 +453,23 @@ restore_backup() {
     # Серверные ключи: cp -a сохраняет mode из архива, поэтому форсируем 600
     # независимо от того с какими правами они лежали в backup-е (audit fix).
     if [[ -f "$td/server_private.key" ]]; then
-        cp -a "$td/server_private.key" "$AWG_DIR/"
+        cp -a "$td/server_private.key" "$AWG_DIR/" || {
+            log_error "Ошибка копирования server_private.key — восстановление прервано."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$AWG_DIR/server_private.key" 2>/dev/null || true
     fi
     if [[ -f "$td/server_public.key" ]]; then
-        cp -a "$td/server_public.key" "$AWG_DIR/"
+        cp -a "$td/server_public.key" "$AWG_DIR/" || {
+            log_error "Ошибка копирования server_public.key — восстановление прервано."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$AWG_DIR/server_public.key" 2>/dev/null || true
     fi
 
@@ -373,16 +486,16 @@ restore_backup() {
 
     rm -rf "$td"
 
+    # Снимаем блокировки до старта сервиса — файловые операции завершены
+    exec {config_lock_fd}>&-
+    exec {backup_lock_fd}>&-
+
     log "Запуск сервиса..."
     if ! systemctl start awg-quick@awg0; then
         log_error "Ошибка запуска сервиса!"
         local status_out
         status_out=$(systemctl status awg-quick@awg0 --no-pager 2>&1) || true
         while IFS= read -r line; do log_error "  $line"; done <<< "$status_out"
-        return 1
-    fi
-    if [[ "$restore_errors" -ne 0 ]]; then
-        log_warn "Восстановление завершено с ошибками. Проверьте конфигурацию."
         return 1
     fi
     log "Восстановление завершено."

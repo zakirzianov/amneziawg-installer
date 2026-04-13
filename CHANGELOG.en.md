@@ -14,6 +14,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.8.4] — 2026-04-13
+
+Reliability and security hardening following a review of the installer and management script.
+
+### Security
+
+- **Extended file type check in `restore_backup`.** The verbose archive listing (`tar -tvzf`) now checks the type of each entry by its first character. Archives containing block devices (`b`), character devices (`c`), FIFOs (`p`), hardlinks (`h`), or symlinks (`l`) are rejected before extraction. The `--no-same-permissions` flag is also added to the extract step so file permissions are always derived from the process umask, never from archive metadata. Protects against crafted archives that bypassed the path checks introduced in v5.8.3.
+- **IPv4 octet range validation in `validate_endpoint`.** Previously the regex accepted `999.0.0.1` as a "valid" IPv4 address because `[0-9]{1,3}` did not check the numeric value. A second pass via `BASH_REMATCH` now verifies each octet is in the 0-255 range. `validate_endpoint "256.0.0.1"` and `validate_endpoint "999.999.999.999"` now correctly return 1.
+- **`restore_backup` — abort on first copy error.** All five critical `cp -a` operations (server/, clients/, keys/, server_private.key, server_public.key) are now explicitly checked. On failure both locks are released and the function returns 1 immediately with a message identifying which file failed. Prevents a half-restored configuration from being left in place.
+
+### Reliability
+
+- **File locks in `backup_configs` and `restore_backup`.** `backup_configs()` now acquires `.awg_backup.lock` (30 s timeout) before creating the archive. `restore_backup()` acquires `.awg_backup.lock` (outer) and `.awg_config.lock` (inner, 30 s) before extraction. Lock ordering is fixed (backup → config), deadlock is impossible. If `manage backup` and `manage restore` run concurrently the second process waits or exits with a clear diagnostic.
+- **Self-deadlock prevention in `restore_backup`.** Before this fix `restore_backup()` called `backup_configs()` for its safety snapshot — both tried to acquire `.awg_backup.lock` → deadlock. An internal `_backup_configs_nolock()` helper was extracted; `restore_backup()` calls it inside its own locked scope. `backup_configs()` (the public entry point) keeps its own lock acquisition.
+- **UFW exit code checks in `setup_improved_firewall`.** Every `ufw` command (default deny/allow, limit SSH, allow VPN port, route rule) on both branches (inactive and active) now checks the exit code. Accumulated errors cause `return 1`. Previously a single UFW rule failure did not abort firewall setup.
+- **SHA256 bypass logged at WARN level.** When starting with a custom `AWG_BRANCH` (used during branch testing) the SHA256 check is skipped. This was previously logged at `log_debug`, invisible in normal output. Now it logs at `log_warn` so developers can see that integrity was not verified.
+
+### Tests
+
+- **+7 new bats tests.** `test_validate_endpoint.bats` +4: reject `999.999.999.999`, `256.1.1.1`; accept `255.255.255.255`, `0.0.0.0`. `test_restore_backup.bats` +1: real archive + mock tar injecting a block device entry → type-check rejects (proper negative test with real archive creation). `test_apply_config.bats` +2: flock timeout returns 1; systemctl restart failure returns non-zero. Total: **92 bats tests**, all PASS.
+
+> 📣 **The main release notes bundle for the 5.8.x branch** lives in [v5.8.0 release notes](https://github.com/bivlked/amneziawg-installer/releases/tag/v5.8.0). v5.8.4 is a hardening patch on top of 5.8.3 with no breaking changes.
+
+---
+
 ## [5.8.3] — 2026-04-11
 
 A batch of hardening fixes and targeted improvements following [Issue #42](https://github.com/bivlked/amneziawg-installer/issues/42) and an internal audit.

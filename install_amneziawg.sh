@@ -8,15 +8,15 @@ fi
 # ==============================================================================
 # Скрипт для установки и настройки AmneziaWG 2.0 на Ubuntu/Debian серверах
 # Автор: @bivlked
-# Версия: 5.8.3
-# Дата: 2026-04-11
+# Версия: 5.8.4
+# Дата: 2026-04-13
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Безопасный режим и Константы ---
 set -o pipefail
 
-SCRIPT_VERSION="5.8.3"
+SCRIPT_VERSION="5.8.4"
 AWG_DIR="/root/awg"
 CONFIG_FILE="$AWG_DIR/awgsetup_cfg.init"
 STATE_FILE="$AWG_DIR/setup_state"
@@ -34,7 +34,7 @@ MANAGE_SCRIPT_PATH="$AWG_DIR/manage_amneziawg.sh"
 # Если AWG_BRANCH переопределён (не v$SCRIPT_VERSION), проверка пропускается.
 # Формат: sha256sum output (hex, 64 chars).
 COMMON_SCRIPT_SHA256="70e0281c2192f43377e7dda7ef2766591ab9c3e7c0600c4758096bf6ddb67955"
-MANAGE_SCRIPT_SHA256="cb7994c811164708c71b2ce8027a91ab5af80632005d8a668913f1b9a50424d9"
+MANAGE_SCRIPT_SHA256="2345952df0b192cbbc54f657f9e97e3a9c624ba31e8af3d03ee659d350642f6a"
 
 # Флаги CLI
 UNINSTALL=0; HELP=0; DIAGNOSTIC=0; VERBOSE=0; NO_COLOR=0; AUTO_YES=0; NO_TWEAKS=0
@@ -426,6 +426,11 @@ validate_endpoint() {
        "$ep" != *' '* && "$ep" != *$'\t'* ]] || return 1
     # Один из трёх форматов: FQDN, IPv4, [IPv6]
     [[ "$ep" =~ ^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*|[0-9]{1,3}(\.[0-9]{1,3}){3}|\[[0-9A-Fa-f:]+\])$ ]] || return 1
+    # Если IPv4 формат — дополнительно проверяем диапазон октетов 0-255
+    if [[ "$ep" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+        [[ "${BASH_REMATCH[1]}" -le 255 && "${BASH_REMATCH[2]}" -le 255 && \
+           "${BASH_REMATCH[3]}" -le 255 && "${BASH_REMATCH[4]}" -le 255 ]] || return 1
+    fi
     return 0
 }
 
@@ -907,15 +912,21 @@ setup_improved_firewall() {
         log_warn "Не удалось определить сетевой интерфейс для UFW route."
     fi
 
-    if ufw status | grep -q inactive; then
+    local ufw_errors=0
+    if ufw status 2>/dev/null | grep -q inactive; then
         log "UFW неактивен. Настройка..."
-        ufw default deny incoming
-        ufw default allow outgoing
-        ufw limit 22/tcp comment "SSH Rate Limit"
-        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN"
+        ufw default deny incoming  || { log_warn "UFW: ошибка default deny incoming"; ufw_errors=1; }
+        ufw default allow outgoing || { log_warn "UFW: ошибка default allow outgoing"; ufw_errors=1; }
+        ufw limit 22/tcp comment "SSH Rate Limit" || { log_warn "UFW: ошибка limit SSH"; ufw_errors=1; }
+        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN" || { log_warn "UFW: ошибка allow VPN port"; ufw_errors=1; }
         if [[ -n "$main_nic" ]]; then
-            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing"
+            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing" \
+                || { log_warn "UFW: ошибка route rule"; ufw_errors=1; }
             log "Правило маршрутизации VPN добавлено (awg0 → ${main_nic})."
+        fi
+        if [[ "$ufw_errors" -ne 0 ]]; then
+            log_error "Одна или несколько правил UFW не применились. Проверьте настройки вручную."
+            return 1
         fi
         log "Правила UFW добавлены."
         log_warn "--- ВКЛЮЧЕНИЕ UFW ---"
@@ -941,10 +952,15 @@ setup_improved_firewall() {
             log_warn "Не удалось создать UFW marker — uninstall не сможет отключить UFW автоматически."
     else
         log "UFW активен. Обновление правил..."
-        ufw limit 22/tcp comment "SSH Rate Limit"
-        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN"
+        ufw limit 22/tcp comment "SSH Rate Limit" || { log_warn "UFW: ошибка limit SSH"; ufw_errors=1; }
+        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN" || { log_warn "UFW: ошибка allow VPN port"; ufw_errors=1; }
         if [[ -n "$main_nic" ]]; then
-            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing"
+            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing" \
+                || { log_warn "UFW: ошибка route rule"; ufw_errors=1; }
+        fi
+        if [[ "$ufw_errors" -ne 0 ]]; then
+            log_error "Одна или несколько правил UFW не применились. Проверьте настройки вручную."
+            return 1
         fi
         ufw reload || log_warn "Ошибка перезагрузки UFW."
         log "Правила обновлены."
@@ -1725,7 +1741,7 @@ verify_sha256() {
         return 0
     fi
     if [[ "${AWG_BRANCH}" != "v${SCRIPT_VERSION}" ]]; then
-        log_debug "SHA256 для $label: пропуск (AWG_BRANCH переопределён: ${AWG_BRANCH})."
+        log_warn "SHA256 для $label: проверка пропущена (AWG_BRANCH=${AWG_BRANCH} != v${SCRIPT_VERSION}). Файл не верифицирован."
         return 0
     fi
     local actual

@@ -98,3 +98,25 @@ setup() {
     run validate_endpoint "2001:db8::1"
     [ "$status" -eq 1 ]
 }
+
+# --- IPv4 octet bounds tests (Phase 2 hardening: each octet must be 0-255) ---
+
+@test "validate_endpoint: rejects IPv4 with all octets out of range (999.999.999.999)" {
+    run validate_endpoint "999.999.999.999"
+    [ "$status" -eq 1 ]
+}
+
+@test "validate_endpoint: rejects IPv4 with first octet 256 (256.1.1.1)" {
+    run validate_endpoint "256.1.1.1"
+    [ "$status" -eq 1 ]
+}
+
+@test "validate_endpoint: accepts IPv4 with max valid octets (255.255.255.255)" {
+    run validate_endpoint "255.255.255.255"
+    [ "$status" -eq 0 ]
+}
+
+@test "validate_endpoint: accepts IPv4 with all-zero octets (0.0.0.0)" {
+    run validate_endpoint "0.0.0.0"
+    [ "$status" -eq 0 ]
+}

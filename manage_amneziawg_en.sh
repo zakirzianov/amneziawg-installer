@@ -8,14 +8,14 @@ fi
 # ==============================================================================
 # AmneziaWG 2.0 peer management script
 # Author: @bivlked
-# Version: 5.8.3
-# Date: 2026-04-11
+# Version: 5.8.4
+# Date: 2026-04-13
 # Repository: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Safe mode and Constants ---
 # shellcheck disable=SC2034
-SCRIPT_VERSION="5.8.3"
+SCRIPT_VERSION="5.8.4"
 set -o pipefail
 AWG_DIR="/root/awg"
 SERVER_CONF_FILE="/etc/amnezia/amneziawg/awg0.conf"
@@ -200,7 +200,9 @@ check_dependencies() {
 # Backup
 # ==============================================================================
 
-backup_configs() {
+# Internal function: performs backup without acquiring a lock.
+# Called only from a context where .awg_backup.lock is already held.
+_backup_configs_nolock() {
     log "Creating backup..."
     local bd="$AWG_DIR/backups"
     mkdir -p "$bd" || die "mkdir error $bd"
@@ -231,6 +233,21 @@ backup_configs() {
         log_warn "Error deleting old backups"
 
     log "Backup created: $bf"
+}
+
+backup_configs() {
+    local backup_lockfile="${AWG_DIR}/.awg_backup.lock"
+    local backup_lock_fd
+    exec {backup_lock_fd}>"$backup_lockfile"
+    if ! flock -x -w 30 "$backup_lock_fd"; then
+        log_error "Backup lock timeout (30 sec). Another backup/restore operation is already running."
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
+    _backup_configs_nolock
+    local _rc=$?
+    exec {backup_lock_fd}>&-
+    return "$_rc"
 }
 
 restore_backup() {
@@ -269,21 +286,79 @@ restore_backup() {
     log "Restoring from $bf"
     if ! confirm_action "restore" "configuration from '$bf'"; then return 1; fi
 
-    log "Backing up current config..."
-    backup_configs
+    # Acquire backup lock (outer) — prevents concurrent backup/restore operations
+    local backup_lockfile="${AWG_DIR}/.awg_backup.lock"
+    local backup_lock_fd
+    exec {backup_lock_fd}>"$backup_lockfile"
+    if ! flock -x -w 30 "$backup_lock_fd"; then
+        log_error "Backup lock timeout (30 sec). Another backup/restore operation is already running."
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
 
-    local td restore_errors=0
-    td=$(manage_mktempdir) || { log_error "Failed to create temp directory"; return 1; }
+    # Acquire config lock (inner) — prevents config changes during restore
+    local config_lockfile="${AWG_DIR}/.awg_config.lock"
+    local config_lock_fd
+    exec {config_lock_fd}>"$config_lockfile"
+    if ! flock -x -w 30 "$config_lock_fd"; then
+        log_error "Config lock timeout (30 sec)."
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
+
+    log "Backing up current config..."
+    if ! _backup_configs_nolock; then
+        log_error "Failed to create backup of current configuration."
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    fi
+
+    local td
+    td=$(manage_mktempdir) || {
+        log_error "Failed to create temp directory"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    }
 
     # Pre-extraction validation: inspect tar contents before unpacking.
     # Defense-in-depth: our threat model (root-only local backups) makes
     # exploitation unlikely, but a crafted or substituted archive could use
     # path traversal (../), absolute paths, symlinks or device files to
     # overwrite arbitrary system files when extracted as root.
+
+    # Type check via verbose listing: reject block/char/FIFO/hardlink entries
+    local _tar_verbose _vline _tc
+    _tar_verbose=$(tar -tvzf "$bf" 2>/dev/null) || {
+        log_error "Cannot read archive contents: $bf"
+        rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
+        return 1
+    }
+    while IFS= read -r _vline; do
+        [[ -z "$_vline" ]] && continue
+        _tc="${_vline:0:1}"
+        case "$_tc" in
+            b|c|p|h|l)
+                log_error "Archive contains dangerous entry type ('${_tc}'): '${_vline}' — restore aborted."
+                rm -rf "$td"
+                exec {config_lock_fd}>&-
+                exec {backup_lock_fd}>&-
+                return 1
+                ;;
+        esac
+    done <<< "$_tar_verbose"
+
+    # Path check: absolute paths and path traversal
     local _tar_list _bad_entry
     _tar_list=$(tar -tzf "$bf" 2>/dev/null) || {
         log_error "Cannot read archive contents: $bf"
         rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
         return 1
     }
     while IFS= read -r _bad_entry; do
@@ -292,20 +367,26 @@ restore_backup() {
         if [[ "$_bad_entry" == /* ]]; then
             log_error "Archive contains absolute path: '$_bad_entry' — restore aborted."
             rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
             return 1
         fi
         # Parent directory traversal
         if [[ "$_bad_entry" == *..* ]]; then
             log_error "Archive contains path traversal (..): '$_bad_entry' — restore aborted."
             rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
             return 1
         fi
     done <<< "$_tar_list"
     log_debug "Pre-extraction check passed: $(echo "$_tar_list" | wc -l) files in archive."
 
-    if ! tar -xzf "$bf" --no-same-owner -C "$td"; then
+    if ! tar -xzf "$bf" --no-same-owner --no-same-permissions -C "$td"; then
         log_error "tar error $bf"
         rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
         return 1
     fi
 
@@ -316,6 +397,8 @@ restore_backup() {
         log_error "Archive contains symlinks (possible symlink attack):"
         while IFS= read -r _sl; do log_error "  $_sl -> $(readlink "$_sl")"; done <<< "$_symlinks"
         rm -rf "$td"
+        exec {config_lock_fd}>&-
+        exec {backup_lock_fd}>&-
         return 1
     fi
 
@@ -327,7 +410,13 @@ restore_backup() {
         local server_conf_dir
         server_conf_dir=$(dirname "$SERVER_CONF_FILE")
         mkdir -p "$server_conf_dir"
-        cp -a "$td/server/"* "$server_conf_dir/" || { log_error "Error copying server"; restore_errors=1; }
+        cp -a "$td/server/"* "$server_conf_dir/" || {
+            log_error "Error copying server — restore aborted."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$server_conf_dir"/*.conf 2>/dev/null
         chmod 700 "$server_conf_dir"
         log_debug "Server config restored to $server_conf_dir"
@@ -335,7 +424,13 @@ restore_backup() {
 
     if [[ -d "$td/clients" ]]; then
         log "Restoring client files..."
-        cp -a "$td/clients/"* "$AWG_DIR/" || { log_error "Error copying clients"; restore_errors=1; }
+        cp -a "$td/clients/"* "$AWG_DIR/" || {
+            log_error "Error copying clients — restore aborted."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$AWG_DIR"/*.conf 2>/dev/null
         chmod 600 "$CONFIG_FILE" 2>/dev/null
         log_debug "Client files restored to $AWG_DIR"
@@ -344,20 +439,37 @@ restore_backup() {
     if [[ -d "$td/keys" ]]; then
         log "Restoring keys..."
         mkdir -p "$KEYS_DIR"
-        cp -a "$td/keys/"* "$KEYS_DIR/" || { log_error "Error copying keys"; restore_errors=1; }
+        cp -a "$td/keys/"* "$KEYS_DIR/" || {
+            log_error "Error copying keys — restore aborted."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$KEYS_DIR"/* 2>/dev/null
         log_debug "Keys restored to $KEYS_DIR"
     fi
 
-    # Server keys
     # Server keys: cp -a preserves the mode from the archive, so we force 600
     # regardless of the mode they had inside the backup (audit fix).
     if [[ -f "$td/server_private.key" ]]; then
-        cp -a "$td/server_private.key" "$AWG_DIR/"
+        cp -a "$td/server_private.key" "$AWG_DIR/" || {
+            log_error "Error copying server_private.key — restore aborted."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$AWG_DIR/server_private.key" 2>/dev/null || true
     fi
     if [[ -f "$td/server_public.key" ]]; then
-        cp -a "$td/server_public.key" "$AWG_DIR/"
+        cp -a "$td/server_public.key" "$AWG_DIR/" || {
+            log_error "Error copying server_public.key — restore aborted."
+            rm -rf "$td"
+            exec {config_lock_fd}>&-
+            exec {backup_lock_fd}>&-
+            return 1
+        }
         chmod 600 "$AWG_DIR/server_public.key" 2>/dev/null || true
     fi
 
@@ -374,16 +486,16 @@ restore_backup() {
 
     rm -rf "$td"
 
+    # Release locks before starting service — file operations complete
+    exec {config_lock_fd}>&-
+    exec {backup_lock_fd}>&-
+
     log "Starting service..."
     if ! systemctl start awg-quick@awg0; then
         log_error "Service start error!"
         local status_out
         status_out=$(systemctl status awg-quick@awg0 --no-pager 2>&1) || true
         while IFS= read -r line; do log_error "  $line"; done <<< "$status_out"
-        return 1
-    fi
-    if [[ "$restore_errors" -ne 0 ]]; then
-        log_warn "Restore completed with errors. Please verify configuration."
         return 1
     fi
     log "Restore completed."

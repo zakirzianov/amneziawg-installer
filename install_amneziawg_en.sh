@@ -8,14 +8,14 @@ fi
 # ==============================================================================
 # AmneziaWG 2.0 installation and configuration script for Ubuntu/Debian servers
 # Author: @bivlked
-# Version: 5.8.3
-# Date: 2026-04-11
+# Version: 5.8.4
+# Date: 2026-04-13
 # Repository: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Safe mode and Constants ---
 set -o pipefail
-SCRIPT_VERSION="5.8.3"
+SCRIPT_VERSION="5.8.4"
 
 AWG_DIR="/root/awg"
 CONFIG_FILE="$AWG_DIR/awgsetup_cfg.init"
@@ -34,7 +34,7 @@ MANAGE_SCRIPT_PATH="$AWG_DIR/manage_amneziawg.sh"
 # Verification is skipped when AWG_BRANCH is overridden (test branch).
 # Format: sha256sum output (hex, 64 chars).
 COMMON_SCRIPT_SHA256="ce5d9e5fb7ef3e9a056b68aa71b3f6d35dc18e32fc9f1595b88cb1e9e3cdfefe"
-MANAGE_SCRIPT_SHA256="d3481f60aff8e49a864f5a48b4e2ae8d3ed68c9a5236941d4020c57d4eb06d60"
+MANAGE_SCRIPT_SHA256="3432d3c12b5acfdfda0293e36077e01b67aacdb6e5bd0573633d55dde9d2912f"
 
 # CLI flags
 UNINSTALL=0; HELP=0; DIAGNOSTIC=0; VERBOSE=0; NO_COLOR=0; AUTO_YES=0; NO_TWEAKS=0
@@ -426,6 +426,11 @@ validate_endpoint() {
        "$ep" != *' '* && "$ep" != *$'\t'* ]] || return 1
     # One of three formats: FQDN, IPv4, [IPv6]
     [[ "$ep" =~ ^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*|[0-9]{1,3}(\.[0-9]{1,3}){3}|\[[0-9A-Fa-f:]+\])$ ]] || return 1
+    # If IPv4 format — additionally validate octet range 0-255
+    if [[ "$ep" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]]; then
+        [[ "${BASH_REMATCH[1]}" -le 255 && "${BASH_REMATCH[2]}" -le 255 && \
+           "${BASH_REMATCH[3]}" -le 255 && "${BASH_REMATCH[4]}" -le 255 ]] || return 1
+    fi
     return 0
 }
 
@@ -907,15 +912,21 @@ setup_improved_firewall() {
         log_warn "Could not detect network interface for UFW route."
     fi
 
-    if ufw status | grep -q inactive; then
+    local ufw_errors=0
+    if ufw status 2>/dev/null | grep -q inactive; then
         log "UFW is inactive. Configuring..."
-        ufw default deny incoming
-        ufw default allow outgoing
-        ufw limit 22/tcp comment "SSH Rate Limit"
-        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN"
+        ufw default deny incoming  || { log_warn "UFW: failed to set default deny incoming"; ufw_errors=1; }
+        ufw default allow outgoing || { log_warn "UFW: failed to set default allow outgoing"; ufw_errors=1; }
+        ufw limit 22/tcp comment "SSH Rate Limit" || { log_warn "UFW: failed to limit SSH"; ufw_errors=1; }
+        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN" || { log_warn "UFW: failed to allow VPN port"; ufw_errors=1; }
         if [[ -n "$main_nic" ]]; then
-            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing"
+            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing" \
+                || { log_warn "UFW: failed to add route rule"; ufw_errors=1; }
             log "VPN routing rule added (awg0 → ${main_nic})."
+        fi
+        if [[ "$ufw_errors" -ne 0 ]]; then
+            log_error "One or more UFW rules failed to apply. Check settings manually."
+            return 1
         fi
         log "UFW rules added."
         log_warn "--- ENABLING UFW ---"
@@ -941,10 +952,15 @@ setup_improved_firewall() {
             log_warn "Failed to create UFW marker — uninstall will not disable UFW automatically."
     else
         log "UFW is active. Updating rules..."
-        ufw limit 22/tcp comment "SSH Rate Limit"
-        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN"
+        ufw limit 22/tcp comment "SSH Rate Limit" || { log_warn "UFW: failed to limit SSH"; ufw_errors=1; }
+        ufw allow "${AWG_PORT}/udp" comment "AmneziaWG VPN" || { log_warn "UFW: failed to allow VPN port"; ufw_errors=1; }
         if [[ -n "$main_nic" ]]; then
-            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing"
+            ufw route allow in on awg0 out on "$main_nic" comment "AmneziaWG Routing" \
+                || { log_warn "UFW: failed to add route rule"; ufw_errors=1; }
+        fi
+        if [[ "$ufw_errors" -ne 0 ]]; then
+            log_error "One or more UFW rules failed to apply. Check settings manually."
+            return 1
         fi
         ufw reload || log_warn "UFW reload error."
         log "Rules updated."
@@ -1726,7 +1742,7 @@ verify_sha256() {
         return 0
     fi
     if [[ "${AWG_BRANCH}" != "v${SCRIPT_VERSION}" ]]; then
-        log_debug "SHA256 for $label: skipped (AWG_BRANCH overridden: ${AWG_BRANCH})."
+        log_warn "SHA256 for $label: verification skipped (AWG_BRANCH=${AWG_BRANCH} != v${SCRIPT_VERSION}). File not verified."
         return 0
     fi
     local actual
