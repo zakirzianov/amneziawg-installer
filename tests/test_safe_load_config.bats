@@ -79,3 +79,30 @@ EOF
     safe_load_config "$CONFIG_FILE"
     [ "$AWG_Jmin" = "55" ]
 }
+
+@test "safe_load_config: strips CRLF line endings" {
+    printf 'export AWG_PORT=44444\r\nexport AWG_Jc=3\r\n' > "$CONFIG_FILE"
+    safe_load_config "$CONFIG_FILE"
+    [ "$AWG_PORT" = "44444" ]
+    [ "$AWG_Jc" = "3" ]
+}
+
+@test "safe_load_config: strips UTF-8 BOM on first line" {
+    printf '\xEF\xBB\xBFexport AWG_PORT=55555\nexport AWG_Jc=4\n' > "$CONFIG_FILE"
+    safe_load_config "$CONFIG_FILE"
+    [ "$AWG_PORT" = "55555" ]
+    [ "$AWG_Jc" = "4" ]
+}
+
+@test "safe_load_config: handles BOM + CRLF combined" {
+    printf '\xEF\xBB\xBFexport AWG_PORT=66666\r\nexport AWG_S1=10\r\n' > "$CONFIG_FILE"
+    safe_load_config "$CONFIG_FILE"
+    [ "$AWG_PORT" = "66666" ]
+    [ "$AWG_S1" = "10" ]
+}
+
+@test "safe_load_config: value with equals sign (base64/I1)" {
+    printf "AWG_I1='<b 0xFF>'\n" > "$CONFIG_FILE"
+    safe_load_config "$CONFIG_FILE"
+    [ "$AWG_I1" = "<b 0xFF>" ]
+}

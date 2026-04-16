@@ -341,8 +341,13 @@ safe_load_config() {
     local config_file="${1:-$CONFIG_FILE}"
     if [[ ! -f "$config_file" ]]; then return 1; fi
 
-    local line key value
+    local line key value first_line=1
     while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$first_line" -eq 1 ]]; then
+            line="${line#$'\xEF\xBB\xBF'}"
+            first_line=0
+        fi
+        line="${line%$'\r'}"
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "${line// /}" ]] && continue
         line="${line#export }"
@@ -371,8 +376,13 @@ safe_load_config() {
 # Чтение одного ключа из конфига (для точечных запросов)
 safe_read_config_key() {
     local key="$1" config_file="${2:-$CONFIG_FILE}"
-    local line
+    local line first_line=1
     while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$first_line" -eq 1 ]]; then
+            line="${line#$'\xEF\xBB\xBF'}"
+            first_line=0
+        fi
+        line="${line%$'\r'}"
         line="${line#export }"
         if [[ "$line" =~ ^${key}=(.*)$ ]]; then
             local value="${BASH_REMATCH[1]}"

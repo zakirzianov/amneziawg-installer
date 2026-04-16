@@ -170,8 +170,13 @@ safe_load_config() {
     local config_file="${1:-$CONFIG_FILE}"
     if [[ ! -f "$config_file" ]]; then return 1; fi
 
-    local line key value
+    local line key value first_line=1
     while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$first_line" -eq 1 ]]; then
+            line="${line#$'\xEF\xBB\xBF'}"
+            first_line=0
+        fi
+        line="${line%$'\r'}"
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "${line// /}" ]] && continue
         line="${line#export }"
@@ -1076,10 +1081,14 @@ regenerate_client() {
     # Перегенерация конфига
     render_client_config "$name" "$client_ip" "$client_privkey" "$server_pubkey" "$endpoint" "${AWG_PORT}" || return 1
 
-    # Восстанавливаем пользовательские настройки
-    sed -i "s/^DNS = .*/DNS = ${current_dns}/" "$AWG_DIR/${name}.conf"
-    sed -i "s/^PersistentKeepalive = .*/PersistentKeepalive = ${current_keepalive}/" "$AWG_DIR/${name}.conf"
-    sed -i "s|^AllowedIPs = .*|AllowedIPs = ${current_allowed_ips}|" "$AWG_DIR/${name}.conf"
+    # Восстанавливаем пользовательские настройки (экранируем & и \ для sed replacement)
+    local _dns _ka _aip
+    _dns=$(printf '%s' "$current_dns" | sed 's/[&\\/]/\\&/g')
+    _ka=$(printf '%s' "$current_keepalive" | sed 's/[&\\/]/\\&/g')
+    _aip=$(printf '%s' "$current_allowed_ips" | sed 's/[&\\/]/\\&/g')
+    sed -i "s/^DNS = .*/DNS = ${_dns}/" "$AWG_DIR/${name}.conf"
+    sed -i "s/^PersistentKeepalive = .*/PersistentKeepalive = ${_ka}/" "$AWG_DIR/${name}.conf"
+    sed -i "s|^AllowedIPs = .*|AllowedIPs = ${_aip}|" "$AWG_DIR/${name}.conf"
 
     # QR-код
     generate_qr "$name"
