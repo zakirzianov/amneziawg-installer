@@ -93,10 +93,10 @@ jobs:
             arch: arm64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           platforms: ${{ matrix.platform }}
 
@@ -109,7 +109,7 @@ jobs:
           EXTRA_SOURCES: ${{ matrix.extra_sources }}
           HEADERS_PKG: ${{ matrix.headers_pkg }}
           MODULE_VERSION: ${{ inputs.module_version }}
-        uses: addnab/docker-run-action@v3
+        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
         with:
           image: ${{ matrix.image }}
           options: >-

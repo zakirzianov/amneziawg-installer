@@ -3,10 +3,10 @@ name: ShellCheck
 on:
   push:
     branches: [main]
-    paths: ['*.sh']
+    paths: ['*.sh', 'scripts/**', 'tests/**']
   pull_request:
     branches: [main]
-    paths: ['*.sh']
+    paths: ['*.sh', 'scripts/**', 'tests/**']
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -32,16 +32,11 @@ jobs:
 
       - name: Run ShellCheck and syntax check
         run: |
-          scripts=(
-            install_amneziawg.sh
-            install_amneziawg_en.sh
-            manage_amneziawg.sh
-            manage_amneziawg_en.sh
-            awg_common.sh
-            awg_common_en.sh
-          )
-          for f in "${scripts[@]}"; do
+          mapfile -t scripts < <(git ls-files '*.sh' 'scripts/*.sh')
+          mapfile -t helpers < <(git ls-files 'tests/*.bash')
+          all=("${scripts[@]}" "${helpers[@]}")
+          for f in "${all[@]}"; do
             echo "--- Checking $f ---"
             bash -n "$f"
-            shellcheck -s bash -S warning "$f"
+            shellcheck -x -s bash -S warning "$f"
           done
