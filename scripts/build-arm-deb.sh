@@ -77,18 +77,20 @@ if [[ ! -f "$KO_PATH" ]]; then
     exit 1
 fi
 
-# Verify vermagic matches the target kernel
-VERMAGIC="$(modinfo "$KO_PATH" | awk '/^vermagic:/{print $2}')"
+# Read module metadata once
+MODINFO_OUT="$(modinfo "$KO_PATH")"
+VERMAGIC="$(echo "$MODINFO_OUT" | awk '/^vermagic:/{print $2}')"
+MODULE_VER="$(echo "$MODINFO_OUT" | awk '/^version:/{print $2}')"
+
 echo "Module vermagic: $VERMAGIC"
 if [[ "$VERMAGIC" != "$KERNEL_VERSION" ]]; then
     echo "ERROR: vermagic mismatch (got $VERMAGIC, expected $KERNEL_VERSION)" >&2
     exit 1
 fi
 
-MODULE_VER="$(modinfo "$KO_PATH" | awk '/^version:/{print $2}')"
 if [[ -z "$MODULE_VER" ]]; then
     echo "ERROR: Could not determine module version from modinfo" >&2
-    modinfo "$KO_PATH" >&2
+    echo "$MODINFO_OUT" >&2
     exit 1
 fi
 echo "Module version: $MODULE_VER"

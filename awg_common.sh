@@ -293,7 +293,11 @@ load_awg_params() {
     fi
 
     # 2. AWG протокольные параметры
-    if [[ -f "$SERVER_CONF_FILE" ]]; then
+    # Если CLI задал --preset/--jc/--jmin/--jmax, параметры уже set через generate_awg_params.
+    # Пропускаем перезагрузку из awg0.conf чтобы не перезатереть свежие значения.
+    if [[ -n "${CLI_PRESET:-}" || -n "${CLI_JC:-}" || -n "${CLI_JMIN:-}" || -n "${CLI_JMAX:-}" ]]; then
+        log_debug "CLI overrides заданы — AWG params из generate_awg_params, не из $SERVER_CONF_FILE"
+    elif [[ -f "$SERVER_CONF_FILE" ]]; then
         # Live config существует — он единственный источник истины.
         # Никакого fallback на init: иначе получим split-brain.
         if ! load_awg_params_from_server_conf; then

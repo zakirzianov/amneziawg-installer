@@ -673,12 +673,15 @@ generate_awg_params() {
     # Рандомизация на каждую установку защищает от ТСПУ-фингерпринта
     # по статическим H-значениям (Discussion #38, elvaleto/Klavishnik).
     # Алгоритм: 8 случайных uint32 → sort → 4 непересекающиеся пары.
-    local _h_ranges
-    _h_ranges=$(generate_awg_h_ranges) || die "Не удалось сгенерировать H1-H4 диапазоны."
-    AWG_H1=$(echo "$_h_ranges" | sed -n '1p')
-    AWG_H2=$(echo "$_h_ranges" | sed -n '2p')
-    AWG_H3=$(echo "$_h_ranges" | sed -n '3p')
-    AWG_H4=$(echo "$_h_ranges" | sed -n '4p')
+    local _h_lines
+    mapfile -t _h_lines < <(generate_awg_h_ranges) || true
+    if [[ ${#_h_lines[@]} -ne 4 ]]; then
+        die "Не удалось сгенерировать H1-H4 диапазоны."
+    fi
+    AWG_H1="${_h_lines[0]}"
+    AWG_H2="${_h_lines[1]}"
+    AWG_H3="${_h_lines[2]}"
+    AWG_H4="${_h_lines[3]}"
 
     # I1: CPS concealment
     AWG_I1=$(generate_cps_i1)
@@ -2062,7 +2065,12 @@ step7_start_service() {
     log "### ШАГ 7: Запуск сервиса и настройка безопасности ###"
 
     log "Включение и запуск awg-quick@awg0..."
-    systemctl enable --now awg-quick@awg0 || die "Ошибка enable --now."
+    if systemctl is-active --quiet awg-quick@awg0; then
+        log "Сервис уже активен — перезапуск для применения конфигурации..."
+        systemctl restart awg-quick@awg0 || die "Ошибка restart awg-quick@awg0."
+    else
+        systemctl enable --now awg-quick@awg0 || die "Ошибка enable --now."
+    fi
     log "Сервис включен и запущен."
 
     log "Проверка статуса сервиса..."

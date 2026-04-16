@@ -596,6 +596,7 @@ modify_client() {
     generate_qr "$name" || log_warn "Failed to update QR code."
     generate_vpn_uri "$name" || log_warn "Failed to update vpn:// URI."
 
+    exec {modify_lock_fd}>&-
     return 0
 }
 

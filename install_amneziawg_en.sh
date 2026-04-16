@@ -672,12 +672,15 @@ generate_awg_params() {
     # Per-install randomization protects against Russian DPI fingerprinting
     # of static H values (Discussion #38, elvaleto/Klavishnik).
     # Algorithm: 8 random uint32 → sort → 4 non-overlapping pairs.
-    local _h_ranges
-    _h_ranges=$(generate_awg_h_ranges) || die "Failed to generate H1-H4 ranges."
-    AWG_H1=$(echo "$_h_ranges" | sed -n '1p')
-    AWG_H2=$(echo "$_h_ranges" | sed -n '2p')
-    AWG_H3=$(echo "$_h_ranges" | sed -n '3p')
-    AWG_H4=$(echo "$_h_ranges" | sed -n '4p')
+    local _h_lines
+    mapfile -t _h_lines < <(generate_awg_h_ranges) || true
+    if [[ ${#_h_lines[@]} -ne 4 ]]; then
+        die "Failed to generate H1-H4 ranges."
+    fi
+    AWG_H1="${_h_lines[0]}"
+    AWG_H2="${_h_lines[1]}"
+    AWG_H3="${_h_lines[2]}"
+    AWG_H4="${_h_lines[3]}"
 
     # I1: CPS concealment
     AWG_I1=$(generate_cps_i1)
@@ -2071,7 +2074,12 @@ step7_start_service() {
     log "### STEP 7: Service startup and security configuration ###"
 
     log "Enabling and starting awg-quick@awg0..."
-    systemctl enable --now awg-quick@awg0 || die "enable --now error."
+    if systemctl is-active --quiet awg-quick@awg0; then
+        log "Service already active — restarting to apply configuration..."
+        systemctl restart awg-quick@awg0 || die "restart awg-quick@awg0 error."
+    else
+        systemctl enable --now awg-quick@awg0 || die "enable --now error."
+    fi
     log "Service enabled and started."
 
     log "Checking service status..."
