@@ -548,24 +548,26 @@ modify_client() {
             esac ;;
     esac
 
-    if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE"; then
-        die "Клиент '$name' не найден."
-    fi
-
-    local cf="$AWG_DIR/$name.conf"
-    if [[ ! -f "$cf" ]]; then die "Файл $cf не найден."; fi
-
-    if ! grep -q -E "^${param}[[:space:]]*=" "$cf"; then
-        log_error "Параметр '$param' не найден в $cf."
-        return 1
-    fi
-
-    # Блокировка ПОСЛЕ валидации — все return ниже закрывают fd
+    # Блокировка перед state-проверками (защита от TOCTOU с concurrent remove)
     local modify_lockfile="${AWG_DIR}/.awg_config.lock"
     local modify_lock_fd
     exec {modify_lock_fd}>"$modify_lockfile"
     if ! flock -x -w 10 "$modify_lock_fd"; then
         log_error "Не удалось получить блокировку конфигурации (другая операция выполняется)"
+        return 1
+    fi
+
+    if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE"; then
+        exec {modify_lock_fd}>&-
+        die "Клиент '$name' не найден."
+    fi
+
+    local cf="$AWG_DIR/$name.conf"
+    if [[ ! -f "$cf" ]]; then exec {modify_lock_fd}>&-; die "Файл $cf не найден."; fi
+
+    if ! grep -q -E "^${param}[[:space:]]*=" "$cf"; then
+        log_error "Параметр '$param' не найден в $cf."
+        exec {modify_lock_fd}>&-
         return 1
     fi
 

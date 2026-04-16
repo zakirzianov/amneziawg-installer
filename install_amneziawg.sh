@@ -2067,7 +2067,7 @@ step7_start_service() {
     log "Включение и запуск awg-quick@awg0..."
     if systemctl is-active --quiet awg-quick@awg0; then
         log "Сервис уже активен — перезапуск для применения конфигурации..."
-        systemctl enable awg-quick@awg0 2>/dev/null || true
+        systemctl enable awg-quick@awg0 || log_warn "Не удалось enable awg-quick@awg0 — проверьте автозапуск вручную"
         systemctl restart awg-quick@awg0 || die "Ошибка restart awg-quick@awg0."
     else
         systemctl enable --now awg-quick@awg0 || die "Ошибка enable --now."

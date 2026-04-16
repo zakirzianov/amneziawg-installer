@@ -548,24 +548,26 @@ modify_client() {
             esac ;;
     esac
 
-    if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE"; then
-        die "Client '$name' not found."
-    fi
-
-    local cf="$AWG_DIR/$name.conf"
-    if [[ ! -f "$cf" ]]; then die "File $cf not found."; fi
-
-    if ! grep -q -E "^${param}[[:space:]]*=" "$cf"; then
-        log_error "Parameter '$param' not found in $cf."
-        return 1
-    fi
-
-    # Lock AFTER validation — all returns below close the fd
+    # Lock before state checks (TOCTOU protection against concurrent remove)
     local modify_lockfile="${AWG_DIR}/.awg_config.lock"
     local modify_lock_fd
     exec {modify_lock_fd}>"$modify_lockfile"
     if ! flock -x -w 10 "$modify_lock_fd"; then
         log_error "Could not acquire config lock (another operation in progress)"
+        return 1
+    fi
+
+    if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE"; then
+        exec {modify_lock_fd}>&-
+        die "Client '$name' not found."
+    fi
+
+    local cf="$AWG_DIR/$name.conf"
+    if [[ ! -f "$cf" ]]; then exec {modify_lock_fd}>&-; die "File $cf not found."; fi
+
+    if ! grep -q -E "^${param}[[:space:]]*=" "$cf"; then
+        log_error "Parameter '$param' not found in $cf."
+        exec {modify_lock_fd}>&-
         return 1
     fi
 
