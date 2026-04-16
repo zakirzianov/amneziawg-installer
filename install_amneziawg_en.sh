@@ -70,6 +70,10 @@ while [[ $# -gt 0 ]]; do
         --endpoint=*)    CLI_ENDPOINT="${1#*=}" ;;
         --yes|-y)        AUTO_YES=1 ;;
         --no-tweaks)     NO_TWEAKS=1; CLI_NO_TWEAKS=1 ;;
+        --preset=*)      CLI_PRESET="${1#*=}" ;;
+        --jc=*)          CLI_JC="${1#*=}" ;;
+        --jmin=*)        CLI_JMIN="${1#*=}" ;;
+        --jmax=*)        CLI_JMAX="${1#*=}" ;;
         *) echo "Unknown argument: $1"; HELP=1 ;;
     esac
     shift
@@ -145,11 +149,17 @@ Options:
   --endpoint=IP         Specify external server IP (for servers behind NAT)
   -y, --yes             Auto-confirm (reboots, UFW, etc.)
   --no-tweaks           Skip hardening/optimization (no UFW, Fail2Ban, sysctl tweaks)
+  --preset=TYPE         Obfuscation parameter preset: default, mobile
+                        mobile: Jc=3, narrow Jmax — for mobile carriers (Tele2, Yota, Megafon)
+  --jc=N               Set Jc manually (1-128, overrides preset)
+  --jmin=N             Set Jmin manually (0-1280, overrides preset)
+  --jmax=N             Set Jmax manually (0-1280, overrides preset, must be >= Jmin)
 
 Examples:
   sudo bash install_amneziawg_en.sh                             # Interactive installation
   sudo bash install_amneziawg_en.sh --port=51820 --route-all    # Non-interactive
   sudo bash install_amneziawg_en.sh --route-amnezia --yes       # Fully automated
+  sudo bash install_amneziawg_en.sh --preset=mobile --yes       # Optimized for mobile networks
   sudo bash install_amneziawg_en.sh --uninstall                 # Uninstall
   sudo bash install_amneziawg_en.sh --diagnostic                # Diagnostics
 
@@ -365,7 +375,7 @@ safe_load_config() {
                 OS_ID|OS_VERSION|OS_CODENAME|AWG_PORT|AWG_TUNNEL_SUBNET|\
                 DISABLE_IPV6|ALLOWED_IPS_MODE|ALLOWED_IPS|AWG_ENDPOINT|\
                 AWG_Jc|AWG_Jmin|AWG_Jmax|AWG_S1|AWG_S2|AWG_S3|AWG_S4|\
-                AWG_H1|AWG_H2|AWG_H3|AWG_H4|AWG_I1|NO_TWEAKS|AWG_APPLY_MODE)
+                AWG_H1|AWG_H2|AWG_H3|AWG_H4|AWG_I1|AWG_PRESET|NO_TWEAKS|AWG_APPLY_MODE)
                     export "$key=$value"
                     ;;
             esac
@@ -398,6 +408,16 @@ safe_read_config_key() {
         fi
     done < "$config_file"
     return 1
+}
+
+validate_jc_value() {
+    local v="$1"
+    [[ "$v" =~ ^[0-9]+$ ]] && [[ "$v" -ge 1 ]] && [[ "$v" -le 128 ]]
+}
+
+validate_junk_size() {
+    local v="$1"
+    [[ "$v" =~ ^[0-9]+$ ]] && [[ "$v" -ge 0 ]] && [[ "$v" -le 1280 ]]
 }
 
 validate_port() {
@@ -592,22 +612,50 @@ generate_cps_i1() {
 
 # Generate all AWG 2.0 parameters
 generate_awg_params() {
-    log "Generating AWG 2.0 parameters..."
+    local preset="${CLI_PRESET:-default}"
+    log "Generating AWG 2.0 parameters (preset: $preset)..."
 
-    # Jc lowered from 4-8 to 3-6: mobile networks (LTE/5G) do not tolerate
-    # large amounts of junk packets well due to smaller MTU, higher packet loss,
-    # and proximity DPI. Discussion #38 (elvaleto): Jc=3 worked immediately on
-    # mobile, while 4-8 required multiple connection attempts. 3-6 balances
-    # obfuscation with mobile network compatibility.
-    AWG_Jc=$(rand_range 3 6)
-    AWG_Jmin=$(rand_range 40 89)
-    # Jmax range lowered from Jmin+100..500 to Jmin+50..250: mobile carriers
-    # (Yota, Tele2, Tattelecom) drop junk packets > 300 bytes.
-    # Issue #42 (markmokrenko): Jmax=518 blocked by Yota/Tele2, Jmax=70 worked.
-    # Discussion #38 (elvaleto): same issue on Tattelecom.
-    # New range: Jmax = Jmin + 50..250, i.e. ~90-339 bytes — enough for
-    # obfuscation without overloading the mobile channel.
-    AWG_Jmax=$(( AWG_Jmin + $(rand_range 50 250) ))
+    case "$preset" in
+        default)
+            # Jc 3-6: balance between obfuscation and mobile compatibility (Discussion #38)
+            AWG_Jc=$(rand_range 3 6)
+            AWG_Jmin=$(rand_range 40 89)
+            # Jmax = Jmin + 50..250 (~90-339 bytes, Issue #42)
+            AWG_Jmax=$(( AWG_Jmin + $(rand_range 50 250) ))
+            ;;
+        mobile)
+            # Jc=3 fixed: alkorrnd (Tele2) — Jc=3 >95%, Jc=4 ~30%, Jc=5 <5%
+            # Narrow Jmax: markmokrenko (Yota) — Jmax=70 works, Jmax>300 blocked
+            AWG_Jc=3
+            AWG_Jmin=$(rand_range 30 50)
+            AWG_Jmax=$(( AWG_Jmin + $(rand_range 20 80) ))
+            log "  Preset 'mobile': Jc=3, narrow Jmax for mobile networks"
+            ;;
+        *)
+            die "Unknown preset: '$preset'. Allowed: default, mobile"
+            ;;
+    esac
+
+    # Individual CLI overrides (on top of preset)
+    if [[ -n "${CLI_JC:-}" ]]; then
+        validate_jc_value "$CLI_JC" || die "Invalid --jc=$CLI_JC (allowed: 1-128)"
+        AWG_Jc="$CLI_JC"
+    fi
+    if [[ -n "${CLI_JMIN:-}" ]]; then
+        validate_junk_size "$CLI_JMIN" || die "Invalid --jmin=$CLI_JMIN (allowed: 0-1280)"
+        AWG_Jmin="$CLI_JMIN"
+    fi
+    if [[ -n "${CLI_JMAX:-}" ]]; then
+        validate_junk_size "$CLI_JMAX" || die "Invalid --jmax=$CLI_JMAX (allowed: 0-1280)"
+        AWG_Jmax="$CLI_JMAX"
+    fi
+
+    # Sanity: Jmax >= Jmin
+    if [[ "$AWG_Jmax" -lt "$AWG_Jmin" ]]; then
+        die "Jmax ($AWG_Jmax) cannot be less than Jmin ($AWG_Jmin)"
+    fi
+
+    AWG_PRESET="$preset"
     AWG_S1=$(rand_range 15 150)
     AWG_S2=$(rand_range 15 150)
 
@@ -634,7 +682,7 @@ generate_awg_params() {
     # I1: CPS concealment
     AWG_I1=$(generate_cps_i1)
 
-    export AWG_Jc AWG_Jmin AWG_Jmax AWG_S1 AWG_S2 AWG_S3 AWG_S4
+    export AWG_Jc AWG_Jmin AWG_Jmax AWG_S1 AWG_S2 AWG_S3 AWG_S4 AWG_PRESET
     export AWG_H1 AWG_H2 AWG_H3 AWG_H4 AWG_I1
 
     log "  Jc=$AWG_Jc, Jmin=$AWG_Jmin, Jmax=$AWG_Jmax"
@@ -1468,6 +1516,7 @@ export AWG_H2='${AWG_H2}'
 export AWG_H3='${AWG_H3}'
 export AWG_H4='${AWG_H4}'
 export AWG_I1='${AWG_I1}'
+export AWG_PRESET='${AWG_PRESET:-default}'
 export NO_TWEAKS=${NO_TWEAKS}
 export AWG_APPLY_MODE='${AWG_APPLY_MODE:-syncconf}'
 EOF

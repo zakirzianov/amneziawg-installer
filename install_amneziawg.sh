@@ -70,6 +70,10 @@ while [[ $# -gt 0 ]]; do
         --endpoint=*)    CLI_ENDPOINT="${1#*=}" ;;
         --yes|-y)        AUTO_YES=1 ;;
         --no-tweaks)     NO_TWEAKS=1; CLI_NO_TWEAKS=1 ;;
+        --preset=*)      CLI_PRESET="${1#*=}" ;;
+        --jc=*)          CLI_JC="${1#*=}" ;;
+        --jmin=*)        CLI_JMIN="${1#*=}" ;;
+        --jmax=*)        CLI_JMAX="${1#*=}" ;;
         *) echo "Неизвестный аргумент: $1"; HELP=1 ;;
     esac
     shift
@@ -145,11 +149,17 @@ show_help() {
   --endpoint=IP         Указать внешний IP сервера (для серверов за NAT)
   -y, --yes             Автоматическое подтверждение (перезагрузки, UFW и т.д.)
   --no-tweaks           Пропустить hardening/оптимизацию (без UFW, Fail2Ban, sysctl tweaks)
+  --preset=ТИП          Набор параметров обфускации: default, mobile
+                        mobile: Jc=3, узкий Jmax — для мобильных операторов (Tele2, Yota, Megafon)
+  --jc=N               Задать Jc вручную (1-128, поверх preset)
+  --jmin=N             Задать Jmin вручную (0-1280, поверх preset)
+  --jmax=N             Задать Jmax вручную (0-1280, поверх preset, должно быть >= Jmin)
 
 Примеры:
   sudo bash install_amneziawg.sh                             # Интерактивная установка
   sudo bash install_amneziawg.sh --port=51820 --route-all    # Неинтерактивная
   sudo bash install_amneziawg.sh --route-amnezia --yes       # Полностью автоматическая
+  sudo bash install_amneziawg.sh --preset=mobile --yes       # Оптимизация для мобильных сетей
   sudo bash install_amneziawg.sh --uninstall                 # Удаление
   sudo bash install_amneziawg.sh --diagnostic                # Диагностика
 
@@ -365,7 +375,7 @@ safe_load_config() {
                 OS_ID|OS_VERSION|OS_CODENAME|AWG_PORT|AWG_TUNNEL_SUBNET|\
                 DISABLE_IPV6|ALLOWED_IPS_MODE|ALLOWED_IPS|AWG_ENDPOINT|\
                 AWG_Jc|AWG_Jmin|AWG_Jmax|AWG_S1|AWG_S2|AWG_S3|AWG_S4|\
-                AWG_H1|AWG_H2|AWG_H3|AWG_H4|AWG_I1|NO_TWEAKS|AWG_APPLY_MODE)
+                AWG_H1|AWG_H2|AWG_H3|AWG_H4|AWG_I1|AWG_PRESET|NO_TWEAKS|AWG_APPLY_MODE)
                     export "$key=$value"
                     ;;
             esac
@@ -398,6 +408,16 @@ safe_read_config_key() {
         fi
     done < "$config_file"
     return 1
+}
+
+validate_jc_value() {
+    local v="$1"
+    [[ "$v" =~ ^[0-9]+$ ]] && [[ "$v" -ge 1 ]] && [[ "$v" -le 128 ]]
+}
+
+validate_junk_size() {
+    local v="$1"
+    [[ "$v" =~ ^[0-9]+$ ]] && [[ "$v" -ge 0 ]] && [[ "$v" -le 1280 ]]
 }
 
 validate_port() {
@@ -591,23 +611,52 @@ generate_cps_i1() {
 }
 
 # Генерация всех AWG 2.0 параметров
+# Поддерживает --preset=default|mobile и точечные --jc/--jmin/--jmax overrides
 generate_awg_params() {
-    log "Генерация параметров AWG 2.0..."
+    local preset="${CLI_PRESET:-default}"
+    log "Генерация параметров AWG 2.0 (preset: $preset)..."
 
-    # Jc снижен с 4-8 до 3-6: мобильные сети (LTE/5G) плохо переносят
-    # большое количество junk-пакетов из-за меньшего MTU, большего packet loss
-    # и proximity DPI. Discussion #38 (elvaleto): с Jc=3 мобильный сразу работает,
-    # при 4-8 подключался раза с третьего. 3-6 — компромисс между обфускацией
-    # и совместимостью с мобильными сетями.
-    AWG_Jc=$(rand_range 3 6)
-    AWG_Jmin=$(rand_range 40 89)
-    # Jmax range снижен с Jmin+100..500 до Jmin+50..250: мобильные операторы
-    # (Yota, Tele2, Таттелеком) плохо переносят junk-пакеты > 300 байт.
-    # Issue #42 (markmokrenko): с Jmax=518 Yota/Tele2 блокировали, с Jmax=70 заработало.
-    # Discussion #38 (elvaleto): аналогичная проблема на Таттелеком.
-    # Новый range: Jmax = Jmin + 50..250, т.е. ~90-339 байт — достаточно для обфускации,
-    # но не перегружает мобильный канал.
-    AWG_Jmax=$(( AWG_Jmin + $(rand_range 50 250) ))
+    case "$preset" in
+        default)
+            # Jc 3-6: компромисс между обфускацией и совместимостью с мобильными (Discussion #38)
+            AWG_Jc=$(rand_range 3 6)
+            AWG_Jmin=$(rand_range 40 89)
+            # Jmax = Jmin + 50..250 (~90-339 байт, Issue #42)
+            AWG_Jmax=$(( AWG_Jmin + $(rand_range 50 250) ))
+            ;;
+        mobile)
+            # Jc=3 фиксированный: alkorrnd (Tele2) — Jc=3 >95%, Jc=4 ~30%, Jc=5 <5%
+            # Узкий Jmax: markmokrenko (Yota) — Jmax=70 работает, Jmax>300 блокируется
+            AWG_Jc=3
+            AWG_Jmin=$(rand_range 30 50)
+            AWG_Jmax=$(( AWG_Jmin + $(rand_range 20 80) ))
+            log "  Preset 'mobile': Jc=3, узкий Jmax для мобильных сетей"
+            ;;
+        *)
+            die "Неизвестный preset: '$preset'. Допустимые: default, mobile"
+            ;;
+    esac
+
+    # Точечные CLI overrides (поверх preset)
+    if [[ -n "${CLI_JC:-}" ]]; then
+        validate_jc_value "$CLI_JC" || die "Невалидный --jc=$CLI_JC (допустимо: 1-128)"
+        AWG_Jc="$CLI_JC"
+    fi
+    if [[ -n "${CLI_JMIN:-}" ]]; then
+        validate_junk_size "$CLI_JMIN" || die "Невалидный --jmin=$CLI_JMIN (допустимо: 0-1280)"
+        AWG_Jmin="$CLI_JMIN"
+    fi
+    if [[ -n "${CLI_JMAX:-}" ]]; then
+        validate_junk_size "$CLI_JMAX" || die "Невалидный --jmax=$CLI_JMAX (допустимо: 0-1280)"
+        AWG_Jmax="$CLI_JMAX"
+    fi
+
+    # Sanity: Jmax >= Jmin
+    if [[ "$AWG_Jmax" -lt "$AWG_Jmin" ]]; then
+        die "Jmax ($AWG_Jmax) не может быть меньше Jmin ($AWG_Jmin)"
+    fi
+
+    AWG_PRESET="$preset"
     AWG_S1=$(rand_range 15 150)
     AWG_S2=$(rand_range 15 150)
 
@@ -634,7 +683,7 @@ generate_awg_params() {
     # I1: CPS concealment
     AWG_I1=$(generate_cps_i1)
 
-    export AWG_Jc AWG_Jmin AWG_Jmax AWG_S1 AWG_S2 AWG_S3 AWG_S4
+    export AWG_Jc AWG_Jmin AWG_Jmax AWG_S1 AWG_S2 AWG_S3 AWG_S4 AWG_PRESET
     export AWG_H1 AWG_H2 AWG_H3 AWG_H4 AWG_I1
 
     log "  Jc=$AWG_Jc, Jmin=$AWG_Jmin, Jmax=$AWG_Jmax"
@@ -1467,6 +1516,7 @@ export AWG_H2='${AWG_H2}'
 export AWG_H3='${AWG_H3}'
 export AWG_H4='${AWG_H4}'
 export AWG_I1='${AWG_I1}'
+export AWG_PRESET='${AWG_PRESET:-default}'
 export NO_TWEAKS=${NO_TWEAKS}
 export AWG_APPLY_MODE='${AWG_APPLY_MODE:-syncconf}'
 EOF
