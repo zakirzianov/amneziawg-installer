@@ -989,6 +989,7 @@ secure_files() {
     find "$AWG_DIR" -name "*.conf" -type f -exec chmod 600 {} \; 2>/dev/null
     find "$AWG_DIR" -name "*.key" -type f -exec chmod 600 {} \; 2>/dev/null
     find "$AWG_DIR" -name "*.png" -type f -exec chmod 600 {} \; 2>/dev/null
+    find "$AWG_DIR" -name "*.vpnuri" -type f -exec chmod 600 {} \; 2>/dev/null
     if [[ -d "$KEYS_DIR" ]]; then
         chmod 700 "$KEYS_DIR" 2>/dev/null
         chmod 600 "$KEYS_DIR"/* 2>/dev/null
@@ -1811,7 +1812,10 @@ step3_check_module() {
     done
 
     local cv kr
-    cv=$(modinfo amneziawg 2>/dev/null | grep vermagic | awk '{print $2}') || cv="?"
+    cv=$(modinfo amneziawg 2>/dev/null | awk '/^vermagic:/{print $2}')
+    if [[ -z "$cv" ]]; then
+        die "Failed to read amneziawg vermagic. Check: modprobe amneziawg && modinfo amneziawg"
+    fi
     kr=$(uname -r)
     if [[ "$cv" != "$kr" ]]; then
         log_warn "VerMagic MISMATCH: Module($cv) != Kernel($kr)!"

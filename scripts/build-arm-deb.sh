@@ -26,10 +26,17 @@ echo "=== amneziawg ARM .deb builder ==="
 echo "KERNEL_ID: $KERNEL_ID"
 echo "Running as: $(uname -a)"
 
-# Resolve exact kernel version from installed headers
-KERNEL_VERSION="$(ls /lib/modules/ | head -1)"
+# Resolve kernel version from installed headers (pick first with a build dir)
+KERNEL_VERSION=""
+for _d in /lib/modules/*/build; do
+    if [[ -d "$_d" ]]; then
+        KERNEL_VERSION="$(basename "$(dirname "$_d")")"
+        break
+    fi
+done
 if [[ -z "$KERNEL_VERSION" ]]; then
-    echo "ERROR: No kernel headers found under /lib/modules/" >&2
+    echo "ERROR: No kernel build directory found under /lib/modules/" >&2
+    ls -la /lib/modules/ >&2 2>/dev/null || true
     exit 1
 fi
 echo "Kernel version: $KERNEL_VERSION"
@@ -49,6 +56,13 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 echo "--- Cloning amneziawg-linux-kernel-module ---"
 git clone --depth=1 ${MODULE_VERSION:+--branch "$MODULE_VERSION"} \
     "$MODULE_REPO" "$WORK_DIR/src"
+
+# Verify kernel build directory exists
+if [[ ! -d "/lib/modules/${KERNEL_VERSION}/build" ]]; then
+    echo "ERROR: Kernel build directory /lib/modules/${KERNEL_VERSION}/build not found" >&2
+    echo "Installed modules: $(ls /lib/modules/)" >&2
+    exit 1
+fi
 
 # Build (upstream Makefile lives in src/ subdir of the cloned repo)
 echo "--- Building kernel module ---"
@@ -72,6 +86,11 @@ if [[ "$VERMAGIC" != "$KERNEL_VERSION" ]]; then
 fi
 
 MODULE_VER="$(modinfo "$KO_PATH" | awk '/^version:/{print $2}')"
+if [[ -z "$MODULE_VER" ]]; then
+    echo "ERROR: Could not determine module version from modinfo" >&2
+    modinfo "$KO_PATH" >&2
+    exit 1
+fi
 echo "Module version: $MODULE_VER"
 
 # Package as .deb

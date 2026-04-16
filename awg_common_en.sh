@@ -1167,6 +1167,10 @@ parse_duration() {
 set_client_expiry() {
     local name="$1"
     local duration="$2"
+    if ! [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        log_error "Invalid client name: '$name'"
+        return 1
+    fi
     if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE" 2>/dev/null; then
         log_error "Client '$name' not found."
         return 1

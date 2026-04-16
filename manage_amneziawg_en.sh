@@ -432,6 +432,8 @@ restore_backup() {
             return 1
         }
         chmod 600 "$AWG_DIR"/*.conf 2>/dev/null
+        chmod 600 "$AWG_DIR"/*.png 2>/dev/null
+        chmod 600 "$AWG_DIR"/*.vpnuri 2>/dev/null
         chmod 600 "$CONFIG_FILE" 2>/dev/null
         log_debug "Client files restored to $AWG_DIR"
     fi
