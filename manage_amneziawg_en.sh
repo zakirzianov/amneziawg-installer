@@ -515,16 +515,7 @@ modify_client() {
         return 1
     fi
 
-    # Lock to protect against concurrent modify/add/remove/restore
-    local modify_lockfile="${AWG_DIR}/.awg_config.lock"
-    local modify_lock_fd
-    exec {modify_lock_fd}>"$modify_lockfile"
-    if ! flock -x -w 10 "$modify_lock_fd"; then
-        log_error "Could not acquire config lock (another operation in progress)"
-        return 1
-    fi
-
-    # Parameters allowed for modification
+    # Validation BEFORE taking the lock (early returns need no fd cleanup)
     local allowed_params="DNS|Endpoint|AllowedIPs|PersistentKeepalive"
     if ! [[ "$param" =~ ^($allowed_params)$ ]]; then
         log_error "Parameter '$param' cannot be changed via modify."
@@ -569,6 +560,15 @@ modify_client() {
         return 1
     fi
 
+    # Lock AFTER validation — all returns below close the fd
+    local modify_lockfile="${AWG_DIR}/.awg_config.lock"
+    local modify_lock_fd
+    exec {modify_lock_fd}>"$modify_lockfile"
+    if ! flock -x -w 10 "$modify_lock_fd"; then
+        log_error "Could not acquire config lock (another operation in progress)"
+        return 1
+    fi
+
     log "Changing '$param' to '$value' for '$name'..."
     local bak
     bak="${cf}.bak-$(date +%F_%H-%M-%S)"
@@ -580,11 +580,13 @@ modify_client() {
     if ! sed -i "s#^${param}[[:space:]]*=[[:space:]]*.*#${param} = ${escaped_value}#" "$cf"; then
         log_error "sed error. Restoring..."
         cp "$bak" "$cf" || log_warn "Restore error."
+        exec {modify_lock_fd}>&-
         return 1
     fi
     if ! grep -q -E "^${param} = " "$cf"; then
         log_error "Replacement failed for '$param'. Restoring..."
         cp "$bak" "$cf" || log_warn "Restore error."
+        exec {modify_lock_fd}>&-
         return 1
     fi
     log_debug "sed: ${param} = ${value} in $cf"

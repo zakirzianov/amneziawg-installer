@@ -300,6 +300,9 @@ load_awg_params() {
     elif [[ -f "$SERVER_CONF_FILE" ]]; then
         # Live config существует — он единственный источник истины.
         # Никакого fallback на init: иначе получим split-brain.
+        # Unset I1 перед парсингом: I1 опционален, если его нет в live conf —
+        # не должен утечь stale из init-файла.
+        unset AWG_I1
         if ! load_awg_params_from_server_conf; then
             log_error "В $SERVER_CONF_FILE отсутствуют обязательные AWG-параметры"
             log_error "(Jc/Jmin/Jmax/S1-S4/H1-H4). Не использую устаревшие значения"

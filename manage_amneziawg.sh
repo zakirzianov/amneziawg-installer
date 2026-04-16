@@ -515,16 +515,7 @@ modify_client() {
         return 1
     fi
 
-    # Блокировка для защиты от конкурентных modify/add/remove/restore
-    local modify_lockfile="${AWG_DIR}/.awg_config.lock"
-    local modify_lock_fd
-    exec {modify_lock_fd}>"$modify_lockfile"
-    if ! flock -x -w 10 "$modify_lock_fd"; then
-        log_error "Не удалось получить блокировку конфигурации (другая операция выполняется)"
-        return 1
-    fi
-
-    # Допустимые для модификации параметры
+    # Валидация ДО взятия блокировки (ранние return не требуют fd cleanup)
     local allowed_params="DNS|Endpoint|AllowedIPs|PersistentKeepalive"
     if ! [[ "$param" =~ ^($allowed_params)$ ]]; then
         log_error "Параметр '$param' нельзя изменить через modify."
@@ -569,6 +560,15 @@ modify_client() {
         return 1
     fi
 
+    # Блокировка ПОСЛЕ валидации — все return ниже закрывают fd
+    local modify_lockfile="${AWG_DIR}/.awg_config.lock"
+    local modify_lock_fd
+    exec {modify_lock_fd}>"$modify_lockfile"
+    if ! flock -x -w 10 "$modify_lock_fd"; then
+        log_error "Не удалось получить блокировку конфигурации (другая операция выполняется)"
+        return 1
+    fi
+
     log "Изменение '$param' на '$value' для '$name'..."
     local bak
     bak="${cf}.bak-$(date +%F_%H-%M-%S)"
@@ -580,11 +580,13 @@ modify_client() {
     if ! sed -i "s#^${param}[[:space:]]*=[[:space:]]*.*#${param} = ${escaped_value}#" "$cf"; then
         log_error "Ошибка sed. Восстановление..."
         cp "$bak" "$cf" || log_warn "Ошибка восстановления."
+        exec {modify_lock_fd}>&-
         return 1
     fi
     if ! grep -q -E "^${param} = " "$cf"; then
         log_error "Замена не выполнена для '$param'. Восстановление..."
         cp "$bak" "$cf" || log_warn "Ошибка восстановления."
+        exec {modify_lock_fd}>&-
         return 1
     fi
     log_debug "sed: ${param} = ${value} в $cf"
