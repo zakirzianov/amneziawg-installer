@@ -523,6 +523,31 @@ modify_client() {
         return 1
     fi
 
+    case "$param" in
+        DNS)
+            if ! [[ "$value" =~ ^[0-9a-fA-F.:,\ ]+$ ]]; then
+                log_error "Невалидный DNS: '$value' (допустимы IP-адреса через запятую)"
+                return 1
+            fi ;;
+        PersistentKeepalive)
+            if ! [[ "$value" =~ ^[0-9]+$ ]] || [[ "$value" -gt 65535 ]]; then
+                log_error "Невалидный PersistentKeepalive: '$value' (допустимо: 0-65535)"
+                return 1
+            fi ;;
+        Endpoint)
+            case "$value" in
+                *$'\n'*|*$'\r'*|*\\*|*\"*|*\'*|"")
+                    log_error "Невалидный Endpoint: '$value'"
+                    return 1 ;;
+            esac ;;
+        AllowedIPs)
+            case "$value" in
+                *$'\n'*|*$'\r'*|*\\*|*\"*|*\'*|"")
+                    log_error "Невалидный AllowedIPs: '$value'"
+                    return 1 ;;
+            esac ;;
+    esac
+
     if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE"; then
         die "Клиент '$name' не найден."
     fi

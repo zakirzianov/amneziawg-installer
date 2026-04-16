@@ -523,6 +523,31 @@ modify_client() {
         return 1
     fi
 
+    case "$param" in
+        DNS)
+            if ! [[ "$value" =~ ^[0-9a-fA-F.:,\ ]+$ ]]; then
+                log_error "Invalid DNS: '$value' (expected comma-separated IPs)"
+                return 1
+            fi ;;
+        PersistentKeepalive)
+            if ! [[ "$value" =~ ^[0-9]+$ ]] || [[ "$value" -gt 65535 ]]; then
+                log_error "Invalid PersistentKeepalive: '$value' (expected: 0-65535)"
+                return 1
+            fi ;;
+        Endpoint)
+            case "$value" in
+                *$'\n'*|*$'\r'*|*\\*|*\"*|*\'*|"")
+                    log_error "Invalid Endpoint: '$value'"
+                    return 1 ;;
+            esac ;;
+        AllowedIPs)
+            case "$value" in
+                *$'\n'*|*$'\r'*|*\\*|*\"*|*\'*|"")
+                    log_error "Invalid AllowedIPs: '$value'"
+                    return 1 ;;
+            esac ;;
+    esac
+
     if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE"; then
         die "Client '$name' not found."
     fi

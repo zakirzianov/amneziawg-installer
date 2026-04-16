@@ -1299,10 +1299,10 @@ install_expiry_cron() {
     fi
     cat > "$EXPIRY_CRON" << CRONEOF
 # AmneziaWG client expiry check — every 5 minutes
-AWG_DIR=${AWG_DIR}
-CONFIG_FILE=${CONFIG_FILE}
-SERVER_CONF_FILE=${SERVER_CONF_FILE}
-*/5 * * * * root /bin/bash -c 'source ${AWG_DIR}/awg_common.sh || exit 1; check_expired_clients' >> ${AWG_DIR}/expiry.log 2>&1
+AWG_DIR="${AWG_DIR}"
+CONFIG_FILE="${CONFIG_FILE}"
+SERVER_CONF_FILE="${SERVER_CONF_FILE}"
+*/5 * * * * root /bin/bash -c 'source "${AWG_DIR}/awg_common.sh" || exit 1; check_expired_clients' >> "${AWG_DIR}/expiry.log" 2>&1
 CRONEOF
     chmod 644 "$EXPIRY_CRON"
     log "Cron-задача expiry установлена: $EXPIRY_CRON"

@@ -4,7 +4,7 @@
 # Usage (environment variables):
 #   KERNEL_ID       Target ID (e.g. rpi-bookworm-arm64). Used in .deb package name.
 #   OUTPUT_DIR      Directory to write the .deb file. Default: /output
-#   MODULE_VERSION  amneziawg module version tag. Default: latest tag from upstream.
+#   MODULE_VERSION  amneziawg module version tag. Default: upstream default branch HEAD.
 #
 # The script:
 #   1. Detects the installed kernel headers and resolves the exact kernel version

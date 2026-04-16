@@ -1297,6 +1297,8 @@ step_uninstall() {
 # ==============================================================================
 
 initialize_setup() {
+    if [ "$(id -u)" -ne 0 ]; then die "Запустите скрипт от root (sudo bash $0)."; fi
+
     mkdir -p "$AWG_DIR" || die "Ошибка создания $AWG_DIR"
     chown root:root "$AWG_DIR"
 
@@ -1316,7 +1318,6 @@ initialize_setup() {
     chmod 640 "$LOG_FILE"
     log "--- НАЧАЛО УСТАНОВКИ AmneziaWG 2.0 (v${SCRIPT_VERSION}) ---"
     log "### ШАГ 0: Инициализация и проверка параметров ###"
-    if [ "$(id -u)" -ne 0 ]; then die "Запустите скрипт от root (sudo bash $0)."; fi
     cd "$AWG_DIR" || die "Ошибка перехода в $AWG_DIR"
     log "Рабочая директория: $AWG_DIR"
     log "Лог файл: $LOG_FILE"

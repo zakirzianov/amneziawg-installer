@@ -1297,6 +1297,8 @@ step_uninstall() {
 # ==============================================================================
 
 initialize_setup() {
+    if [ "$(id -u)" -ne 0 ]; then die "Run the script as root (sudo bash $0)."; fi
+
     mkdir -p "$AWG_DIR" || die "Error creating $AWG_DIR"
     chown root:root "$AWG_DIR"
 
@@ -1317,7 +1319,6 @@ initialize_setup() {
     chmod 640 "$LOG_FILE"
     log "--- STARTING AmneziaWG 2.0 INSTALLATION (v${SCRIPT_VERSION}) ---"
     log "### STEP 0: Initialization and parameter check ###"
-    if [ "$(id -u)" -ne 0 ]; then die "Run the script as root (sudo bash $0)."; fi
     cd "$AWG_DIR" || die "Error changing to $AWG_DIR"
     log "Working directory: $AWG_DIR"
     log "Log file: $LOG_FILE"
