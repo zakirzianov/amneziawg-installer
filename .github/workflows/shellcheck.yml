@@ -33,10 +33,18 @@ jobs:
       - name: Run ShellCheck and syntax check
         run: |
           mapfile -t scripts < <(git ls-files '*.sh' 'scripts/*.sh')
-          mapfile -t tests < <(git ls-files 'tests/*.bash' 'tests/*.bats')
-          all=("${scripts[@]}" "${tests[@]}")
-          for f in "${all[@]}"; do
-            echo "--- Checking $f ---"
+          mapfile -t test_helpers < <(git ls-files 'tests/*.bash')
+          mapfile -t test_bats < <(git ls-files 'tests/*.bats')
+
+          # bash -n only on .sh and .bash (bats syntax is not valid bash)
+          for f in "${scripts[@]}" "${test_helpers[@]}"; do
+            echo "--- bash -n $f ---"
             bash -n "$f"
+          done
+
+          # shellcheck on all shell files including .bats
+          all=("${scripts[@]}" "${test_helpers[@]}" "${test_bats[@]}")
+          for f in "${all[@]}"; do
+            echo "--- shellcheck $f ---"
             shellcheck -x -s bash -S warning "$f"
           done
