@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 # Tests for load_awg_params_from_server_conf (#38 fix: regen reads live awg0.conf)
+# shellcheck disable=SC2154  # Variables set by sourced scripts at runtime
 
 load test_helper
 

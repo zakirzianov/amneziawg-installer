@@ -23,6 +23,7 @@
   <a href="https://github.com/bivlked/amneziawg-installer/releases"><img src="https://img.shields.io/badge/Installer_Version-5.10.0-blue" alt="Version"></a>
   <img src="https://img.shields.io/badge/AmneziaWG-2.0-blueviolet" alt="AWG 2.0">
   <a href="https://github.com/bivlked/amneziawg-installer/actions/workflows/shellcheck.yml"><img src="https://github.com/bivlked/amneziawg-installer/actions/workflows/shellcheck.yml/badge.svg" alt="ShellCheck"></a>
+  <a href="https://github.com/bivlked/amneziawg-installer/actions/workflows/test.yml"><img src="https://github.com/bivlked/amneziawg-installer/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
   <a href="https://github.com/bivlked/amneziawg-installer/stargazers"><img src="https://img.shields.io/github/stars/bivlked/amneziawg-installer?style=flat" alt="Stars"></a>
   <a href="https://github.com/bivlked/amneziawg-installer/network/members"><img src="https://img.shields.io/github/forks/bivlked/amneziawg-installer?style=flat" alt="Forks"></a>
   <img src="https://img.shields.io/github/last-commit/bivlked/amneziawg-installer" alt="Last commit">
@@ -522,7 +523,7 @@ sudo bash /root/awg/manage_amneziawg.sh restart              # Перезапу�
 ## 📝 Лицензия и Автор
 
 * **Автор скриптов:** @bivlked - [GitHub](https://github.com/bivlked)
-* **Лицензия:** MIT License (см. файл `LICENSE` в репозитории)
+* **Лицензия:** MIT — свободное ПО с открытым исходным кодом (см. `LICENSE`)
 
 ---
 
