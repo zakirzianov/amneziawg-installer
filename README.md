@@ -42,6 +42,8 @@
   <a href="#upravlenie">Управление</a> •
   <a href="#dopolnitelno">Дополнительно</a> •
   <a href="#faq-main">FAQ</a> •
+  <a href="#nepoladki">Устранение неполадок</a> •
+  <a href="#ekosistema">Экосистема</a> •
   <a href="#licenziya">Лицензия</a>
 </p>
 
@@ -462,6 +464,7 @@ sudo bash /root/awg/manage_amneziawg.sh restart              # Перезапу�
 
 ---
 
+<a id="nepoladki"></a>
 ## 🛠️ Устранение неполадок
 
 1.  **Логи:** `/root/awg/install_amneziawg.log`, `/root/awg/manage_amneziawg.log`
@@ -473,6 +476,7 @@ sudo bash /root/awg/manage_amneziawg.sh restart              # Перезапу�
 
 ---
 
+<a id="ekosistema"></a>
 ## 🌐 Экосистема
 
 ### Клиенты

@@ -183,7 +183,7 @@ check_dependencies() {
         ok=0
     fi
     if [[ "$ok" -eq 0 ]]; then
-        die "Installation files not found. Run install_amneziawg.sh."
+        die "Installation files not found. Run install_amneziawg_en.sh."
     fi
 
     if ! command -v awg &>/dev/null; then die "'awg' not found."; fi

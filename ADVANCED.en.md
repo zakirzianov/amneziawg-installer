@@ -494,7 +494,7 @@ Client keys are stored in `/root/awg/keys/` (permissions 600). Server keys are i
 The installer downloads `awg_common.sh` and `manage_amneziawg.sh` from URLs pinned to the specific version tag:
 
 ```
-https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.8.3/awg_common.sh
+https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.10.0/awg_common.sh
 ```
 
 This provides **supply chain pinning** — ensuring downloaded scripts match the installer version, even if `main` has already been updated.
@@ -514,12 +514,12 @@ To update the management and shared library scripts **without reinstalling the s
 
 ```bash
 # Russian version:
-wget -O /root/awg/manage_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.8.3/manage_amneziawg.sh
-wget -O /root/awg/awg_common.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.8.3/awg_common.sh
+wget -O /root/awg/manage_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.10.0/manage_amneziawg.sh
+wget -O /root/awg/awg_common.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.10.0/awg_common.sh
 
 # English version:
-wget -O /root/awg/manage_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.8.3/manage_amneziawg_en.sh
-wget -O /root/awg/awg_common.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.8.3/awg_common_en.sh
+wget -O /root/awg/manage_amneziawg.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.10.0/manage_amneziawg_en.sh
+wget -O /root/awg/awg_common.sh https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.10.0/awg_common_en.sh
 
 # Set permissions
 chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
@@ -609,7 +609,7 @@ chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
   <b>A:</b> Starting with v5.10.0, simply install with the <code>--preset=mobile</code> flag — it automatically sets optimal parameters for mobile networks (Jc=3, narrow Jmax). Discussion #38 (@elvaleto): on Tattelecom (Letai) with Jc=4-8 it took multiple attempts to connect, but after setting <code>Jc = 3</code> it worked immediately.
   <br><br>
   <b>Fresh install (recommended):</b>
-  <pre>sudo bash install_amneziawg.sh --preset=mobile --yes --route-amnezia</pre>
+  <pre>sudo bash install_amneziawg_en.sh --preset=mobile --yes --route-amnezia</pre>
 
   <b>Existing install — manual edit:</b>
   <ol>
@@ -654,7 +654,7 @@ chmod 700 /root/awg/manage_amneziawg.sh /root/awg/awg_common.sh
 </details>
 
 <details>
-  <summary><strong>Q: "Another install_amneziawg.sh instance is already running" — what is this?</strong></summary>
+  <summary><strong>Q: "Another installer instance is already running" — what is this?</strong></summary>
   <b>A:</b> As of v5.8.0, the installer takes a process-wide <code>flock</code> on <code>/root/awg/.install.lock</code> at the beginning of <code>initialize_setup()</code>. This prevents two parallel runs from racing each other on <code>apt-get</code> and corrupting package state. If you see this error but no second installer is actually running (hung / crashed process), remove <code>/root/awg/.install.lock</code> and try again.
 </details>
 

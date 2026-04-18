@@ -22,6 +22,11 @@ Desktop.ini
 *.lock
 *.pid
 
+# Build artifacts
+output/
+*.deb
+*.sha256
+
 # Secrets
 .env
 .env.*

@@ -42,6 +42,8 @@
   <a href="#client-management">Management</a> •
   <a href="#additional-information">More</a> •
   <a href="#faq">FAQ</a> •
+  <a href="#troubleshooting">Troubleshooting</a> •
+  <a href="#ecosystem">Ecosystem</a> •
   <a href="#license">License</a>
 </p>
 
@@ -462,6 +464,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 
 ---
 
+<a id="troubleshooting"></a>
 ## 🛠️ Troubleshooting
 
 1.  **Logs:** `/root/awg/install_amneziawg.log`, `/root/awg/manage_amneziawg.log`
@@ -473,6 +476,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 
 ---
 
+<a id="ecosystem"></a>
 ## 🌐 Ecosystem
 
 ### Clients

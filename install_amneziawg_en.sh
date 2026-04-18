@@ -1376,7 +1376,7 @@ initialize_setup() {
     INSTALL_LOCK_FILE="$AWG_DIR/.install.lock"
     exec 9>"$INSTALL_LOCK_FILE" || die "Cannot open $INSTALL_LOCK_FILE"
     if ! flock -n 9; then
-        die "Another install_amneziawg.sh instance is already running. Wait for it to finish, or if the process is hung, remove $INSTALL_LOCK_FILE and try again."
+        die "Another install_amneziawg_en.sh instance is already running. Wait for it to finish, or if the process is hung, remove $INSTALL_LOCK_FILE and try again."
     fi
 
     touch "$LOG_FILE" || die "Failed to create log file $LOG_FILE"
