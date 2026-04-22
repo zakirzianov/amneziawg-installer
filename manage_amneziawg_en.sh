@@ -460,7 +460,7 @@ restore_backup() {
     # AND _rollback_snap is captured. Always → remove temp dir and
     # release locks. First we clear the RETURN trap — bash's `trap ...
     # RETURN` has global lifetime, without this it would fire on any
-    # subsequent return in this shell (Codex Q1).
+    # subsequent return in this shell.
     _restore_cleanup() {
         # Order matters: capture $? (return code from restore_backup)
         # FIRST, then clear the RETURN trap. Swapping would break $?

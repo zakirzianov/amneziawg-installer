@@ -458,7 +458,7 @@ restore_backup() {
     # _rollback_snap. Всегда → удаление временной директории и снятие
     # блокировок. Первым делом сбрасываем RETURN trap — bash `trap ...
     # RETURN` имеет global lifetime и без очистки срабатывал бы на
-    # любом последующем return в этом shell (Codex Q1).
+    # любом последующем return в этом shell.
     _restore_cleanup() {
         # Порядок важен: сначала захватываем $? (return-code функции
         # restore_backup), потом снимаем RETURN trap. Swap сломал бы

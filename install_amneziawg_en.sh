@@ -34,7 +34,7 @@ MANAGE_SCRIPT_PATH="$AWG_DIR/manage_amneziawg.sh"
 # Verification is skipped when AWG_BRANCH is overridden (test branch).
 # Format: sha256sum output (hex, 64 chars).
 COMMON_SCRIPT_SHA256="12a9702ffbb1fd4734b2db3d8636a43f67da5b5b9a4e317001e899e5e481b245"
-MANAGE_SCRIPT_SHA256="cd7a98ea9c6dd34cc22c77d54d9fff9bb44844aad8edc6995dac9de92749b131"
+MANAGE_SCRIPT_SHA256="72a2a92c8881fcdac2c6e6254c51f0f0433df071fb3d21e6d2c36ac32998885f"
 
 # CLI flags
 UNINSTALL=0; HELP=0; DIAGNOSTIC=0; VERBOSE=0; NO_COLOR=0; AUTO_YES=0; NO_TWEAKS=0
