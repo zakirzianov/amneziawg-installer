@@ -14,6 +14,51 @@
 
 ---
 
+## [5.11.0] — 2026-04-22
+
+Robustness bundle — закрыта пачка сценариев, в которых `install` или `manage` мог оставить систему в полу-сконфигурированном состоянии при сбое: двойной запуск `install` без reboot, обрыв скачивания helpers, kill во время `restore`, failed backup перед destructive `modify`, гонка при параллельном `regen` клиентов. CI ARM matrix теперь покрывает Ubuntu 25.10 и Debian 13 prebuilt-пакетами. Обновление рекомендуется всем, но v5.10.2 остаётся рабочим — блокирующих багов в нём нет.
+
+### Исправлено — `install_amneziawg.sh`
+
+- **Двойной запуск `install` без reboot больше не ломает DKMS.** `request_reboot` перед шагом 2 теперь сохраняет `/proc/sys/kernel/random/boot_id` в `$AWG_DIR/.boot_id_before_step2`. На входе шага 2 проверяется: если boot_id совпадает с сохранённым — скрипт умирает с сообщением «ожидалась перезагрузка перед step 2». Раньше повторный запуск без reboot пытался поставить amneziawg-dkms под старое ядро и падал в вермагике. (Codex A4.1)
+- **Запись `setup_state` стала атомарной.** Теперь через `tmp + flock + mv -f` по PID-специфичному пути (`${STATE_FILE}.tmp.$BASHPID`). Parallel-invocation scenarios больше не могут прочитать полу-записанный номер шага. (Codex A1.3)
+- **Download `awg_common.sh` и `manage_amneziawg.sh` — через mktemp + SHA256 + atomic mv.** Новый helper `_secure_download()`: curl пишет в `mktemp`, SHA256 проверяется, успешный файл переезжает в целевой путь одним `mv`. Прерванное соединение больше не оставляет полу-скачанный helper в `/root/awg/`. Аналогично для GPG keyring при импорте PPA. (Codex A1.2)
+
+### Исправлено — `manage_amneziawg.sh` + `awg_common.sh`
+
+- **`restore_backup` откатывается при сбое.** Перед любой destructive-операцией `restore` создаёт pre-restore snapshot (уже делался и раньше для возможности отмены). В v5.11.0 snapshot становится известен самой функции (через `LAST_BACKUP_PATH`), а на все error-пути навешен `trap _restore_cleanup RETURN`. При ошибке после `systemctl stop` — автоматический откат: распаковка snapshot, возврат файлов на место, `systemctl start awg-quick@awg0`. Добавлен pre-flight `validate_awg_config` перед стартом сервиса — если восстановленный конфиг не валиден, сервис не стартует «сломанным», срабатывает откат. Trap чистит `RETURN`-ловушку в начале handler'а (`trap - RETURN`), чтобы не протечь в последующие вызовы. (Codex A5.1, Q1, Q2)
+- **`_backup_configs_nolock` не прячет сбои на критичных файлах.** Silent `|| true` убран. При ошибке `cp` на критичные артефакты (`awg0.conf`, `awgsetup_cfg.init`, `server_public.key`, `server_private.key`, клиентские `*.conf`, `$KEYS_DIR/*`, `expiry/`, `/etc/cron.d/awg-expiry`) функция возвращает 1 — повреждённый бэкап опаснее отсутствующего. Опциональные артефакты (QR `*.png`, `*.vpnuri`) остаются `log_warn`. Пустые глобы отличаются от сбоя cp через `compgen -G` pre-check. (Codex A1.1, Q3)
+- **`modify_client` не запускает destructive `sed` при failed backup.** Ранее `cp "$cf" "$bak" || log_warn "..."` — замечание в лог, потом `sed -i` уничтожал конфиг без возможности отката. Теперь backup — hard gate: `if ! cp ...; then log_error + release lock + return 1`. (Codex A5.2)
+- **`regenerate_client` сериализуется через lock и проверяет каждый `sed`.** Функция оборачивается в `.awg_config.lock` (flock, 10 с таймаут) — параллельные `regen` на одном имени больше не повреждают клиентский конфиг. Все три `sed -i` (DNS, PersistentKeepalive, AllowedIPs) теперь с `if !` — при сбое возвращается 1, lock освобождается. Lock держится только пока мутируется `.conf`, до `generate_qr`/`generate_vpn_uri` он снимается — QR/URI остаются best-effort derived artifacts. (Codex A5.3, Q4)
+- **`modify_client` flock-timeout больше не протекает fd.** В ветке «другая операция занимает lock» теперь `exec {modify_lock_fd}>&-` перед `return 1`. Раньше fd оставался открытым до выхода шелла. (Codex Q5)
+- **Версия `manage_amneziawg.sh` синхронизирована между RU и EN.** Разъехавшиеся `5.10.0` / `5.10.1` сведены к `5.11.0`. (Codex A3.1)
+
+### CI / сборка
+
+- **ARM matrix: добавлены Ubuntu 25.10 и Debian 13, удалён Ubuntu 22.04.** `.github/workflows/arm-build.yml` теперь собирает prebuilt `amneziawg.ko` для 7 targets: 3× Raspberry Pi + `ubuntu-2404-arm64` + `ubuntu-2510-arm64` + `debian-bookworm-arm64` + `debian-trixie-arm64`. Матрица строго соответствует supported-OS списку инсталлятора. `_try_install_prebuilt_arm` в `install_amneziawg.sh` обновлён синхронно — новые ветви `*-generic* + 25.10 → ubuntu-2510-arm64` и `*-arm64* + debian + 13 → debian-trixie-arm64`; мёртвая 22.04 удалена. (Codex A7.2)
+- **Timeouts на всех workflow-jobs.** `shellcheck:10m`, `test:10m`, `release:15m`, `arm-build prepare:5m`, `build:60m`. Зависший job больше не жжёт CI-минуты молча. (Codex A7.1, уехало ещё в polish PR #55 к v5.10.2)
+
+### Docs
+
+- **Минимальный `awg0.conf` для AWG 2.0 в `ADVANCED.md` / `ADVANCED.en.md`.** Новая секция с примером для ручной установки (`amneziawg-go` в LXC и пр.): все 11 обфускационных параметров (`Jc`/`Jmin`/`Jmax`/`S1`-`S4`/`H1`-`H4`), примечания по S3/S4 (добавлены в AWG 2.0 позже S1/S2 — в конфигах от AWG 1.x их может не быть), `INT32_MAX` upper-bound для H1-H4, `I1` опционален.
+- **Пояснение `#_Name = <имя>` маркера** в «Полный список команд управления» — раньше было неявно, только в примерах. Теперь явно: `list/remove/regen/modify` ищут клиентов по этому маркеру в `[Peer]`; при миграции `awg0.conf` со старого сервера нужно дописывать его руками.
+- **Секция «LXC / Docker через amneziawg-go (userspace)»** в ADVANCED (источник: [@Akh-commits](https://github.com/Akh-commits), [Issue #51](https://github.com/bivlked/amneziawg-installer/issues/51)). Рабочий рецепт для privileged LXC на Proxmox 9 c Debian 13 guest, security tradeoffs, prebuilt binary vs source build. Уехало в main до v5.11.0 tag, поэтому формально здесь фиксируется как часть v5.11.0.
+
+### Тесты
+
+- **+84 новых bats** (230 total, было 146 на v5.10.2).
+  - `test_state_machine.bats` (+18) — atomic `update_state`, `boot_id` guard, entry-step-2 die, request_reboot capture.
+  - `test_manage_robustness.bats` (+24) — `_backup_configs_nolock` contract (LAST_BACKUP_PATH, compgen -G, critical vs optional), `modify_client` backup gate, `regenerate_client` lock + sed checks, Q5 flock-timeout fd release.
+  - `test_restore_rollback.bats` (+27) — `_restore_do_rollback` helper, `trap RETURN` + cleanup contract, `_destructive_ops_started` gate, pre-flight `validate_awg_config`, post-audit Q1/Q2/Q3 regression.
+  - `test_arm_matrix.bats` (+15) — matrix-vs-installer cross-reference, RU/EN mapping parity, absence of dropped 22.04.
+- **Бонус**: 9 тестов с Unicode em-dash/arrow в именах, которые bats-парсер silently skipал, переведены на ASCII. Теперь реально выполняются.
+
+### Breaking changes
+
+- Нет. `restore_backup` внешнее поведение прежнее (успех → сервис работает, сбой → раньше частичное состояние, теперь откат); `manage` CLI не менялся; формат `awgsetup_cfg.init` совместим; SHA256 helpers обновлены — downgrade с v5.11.0 на v5.10.2 возможен откатом файлов.
+
+---
+
 ## [5.10.2] — 2026-04-20
 
 Срочный hotfix. В v5.10.1 любая свежая установка AmneziaWG 2.0 падала в шаге 1 с ошибкой `apt_update_tolerant: command not found` — на всех зеркалах, не только Hetzner. Если вы уже запускали v5.10.1 на новом сервере или планируете ставить с нуля — переходите на v5.10.2. Также закрыт граничный случай, где `apt_update_tolerant` мог проигнорировать silent crash (SIGKILL, OOM).
