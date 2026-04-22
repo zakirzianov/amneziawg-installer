@@ -78,10 +78,10 @@ jobs:
             headers_pkg: linux-headers-generic
             arch: arm64
 
-          # Ubuntu 22.04 LTS — arm64
-          - id: ubuntu-2204-arm64
+          # Ubuntu 25.10 Questing — arm64 (latest non-LTS, kernel 6.17+)
+          - id: ubuntu-2510-arm64
             platform: linux/arm64
-            image: ubuntu:22.04
+            image: ubuntu:25.10
             extra_sources: ''
             headers_pkg: linux-headers-generic
             arch: arm64
@@ -90,6 +90,14 @@ jobs:
           - id: debian-bookworm-arm64
             platform: linux/arm64
             image: debian:bookworm
+            extra_sources: ''
+            headers_pkg: linux-headers-arm64
+            arch: arm64
+
+          # Debian 13 Trixie — arm64 (current stable, kernel 6.12 LTS)
+          - id: debian-trixie-arm64
+            platform: linux/arm64
+            image: debian:trixie
             extra_sources: ''
             headers_pkg: linux-headers-arm64
             arch: arm64

@@ -1694,8 +1694,10 @@ _try_install_prebuilt_arm() {
         target_id="rpi-bookworm-armhf"
     elif [[ "$kernel" == *-generic* && "${OS_VERSION:-}" == "24.04" ]]; then
         target_id="ubuntu-2404-arm64"
-    elif [[ "$kernel" == *-generic* && "${OS_VERSION:-}" == "22.04" ]]; then
-        target_id="ubuntu-2204-arm64"
+    elif [[ "$kernel" == *-generic* && "${OS_VERSION:-}" == "25.10" ]]; then
+        target_id="ubuntu-2510-arm64"
+    elif [[ "$kernel" == *-arm64* && "${OS_ID:-}" == "debian" && "${OS_VERSION:-}" == "13" ]]; then
+        target_id="debian-trixie-arm64"
     elif [[ "$kernel" == *-arm64* && "${OS_ID:-}" == "debian" ]]; then
         target_id="debian-bookworm-arm64"
     else
