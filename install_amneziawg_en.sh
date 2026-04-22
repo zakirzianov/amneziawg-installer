@@ -1821,8 +1821,12 @@ step2_install_amnezia() {
         local _kf_tmp
         _kf_tmp=$(mktemp -p "$keyring_dir" ".amnezia-ppa.gpg.tmp.XXXXXX") \
             || die "Failed to create temp file for GPG key."
+        # --batch --no-tty --yes: gpg must not open /dev/tty (non-interactive
+        # SSH, cloud-init, Ansible, etc.) and must not abort with "File exists"
+        # when overwriting the mktemp-created tmp file. Without --yes gpg in
+        # batch mode refuses to write into the pre-existing empty tmp file.
         if ! curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x57290828" \
-             | gpg --dearmor -o "$_kf_tmp"; then
+             | gpg --batch --no-tty --yes --dearmor -o "$_kf_tmp"; then
             rm -f "$_kf_tmp" 2>/dev/null
             die "Amnezia PPA GPG key import error."
         fi

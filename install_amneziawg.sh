@@ -1809,8 +1809,12 @@ step2_install_amnezia() {
         local _kf_tmp
         _kf_tmp=$(mktemp -p "$keyring_dir" ".amnezia-ppa.gpg.tmp.XXXXXX") \
             || die "Не удалось создать временный файл для GPG ключа."
+        # --batch --no-tty --yes: gpg не открывает /dev/tty (non-interactive
+        # SSH, cloud-init, Ansible и т.п.) и не падает с "File exists" при
+        # overwrite mktemp-файла. Без этих флагов gpg в батч-режиме откажется
+        # писать в уже существующий пустой tmp-файл от mktemp.
         if ! curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x57290828" \
-             | gpg --dearmor -o "$_kf_tmp"; then
+             | gpg --batch --no-tty --yes --dearmor -o "$_kf_tmp"; then
             rm -f "$_kf_tmp" 2>/dev/null
             die "Ошибка импорта GPG ключа Amnezia PPA."
         fi
