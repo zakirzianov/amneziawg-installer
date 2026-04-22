@@ -302,6 +302,40 @@ AllowedIPs = 10.9.9.2/32
 </details>
 
 <details>
+<summary><strong>Minimal awg0.conf for AWG 2.0 (for manual setup)</strong></summary>
+
+If you are setting up the server without my installer (for example, `amneziawg-go` in LXC), the minimum valid `awg0.conf` for AWG 2.0 looks like this — all 11 obfuscation parameters are required; `manage_amneziawg.sh add/regen` will abort if any one of them is missing:
+
+```ini
+[Interface]
+PrivateKey = [SERVER_PRIVATE_KEY]
+Address = 10.9.9.1/24
+ListenPort = 51820
+Jc = 4
+Jmin = 40
+Jmax = 90
+S1 = 50
+S2 = 40
+S3 = 12
+S4 = 8
+H1 = 1234567
+H2 = 2345678
+H3 = 3456789
+H4 = 4567890
+```
+
+Notes for manual setups:
+
+- **S3/S4** are AWG 2.0 parameters added to the protocol later than S1/S2. Configs from the earlier AWG 1.x release may not have them — add by hand, any value in `0-127` works, the key point is that the keys exist at all.
+- **H1–H4** can be single-value (`H1 = 1234567`) or a range (`H1 = 100000-200000`); ranges must not overlap. Keep the upper bound at `2147483647` (`INT32_MAX`) or below, otherwise `amneziawg-windows-client` may flag the value as invalid.
+- **I1** (CPS packets) is optional: without it the AWG client falls back to AWG 1.0 mode. For full AWG 2.0 obfuscation add `I1 = <r 128>` (random 128 bytes) or `I1 = <b 0xHEX>` (binary).
+- **MTU**, **PostUp/PostDown** are optional and depend on the setup (see the `amneziawg-go` LXC section on `iptables` MASQUERADE).
+
+After creating such an `awg0.conf`, `manage_amneziawg.sh` also needs `/root/awg/server_public.key` (compute it with `awg pubkey < /etc/amnezia/amneziawg/server_private.key > /root/awg/server_public.key`) and a minimal `/root/awg/awgsetup_cfg.init` containing at least `AWG_PORT`, `AWG_TUNNEL_SUBNET`, `AWG_ENDPOINT`.
+
+</details>
+
+<details>
 <summary><strong>client.conf (client config, keys masked)</strong></summary>
 
 ```ini
@@ -391,6 +425,8 @@ Options:
 ## 🧑‍💻 Full List of Management Commands
 
 Usage: `sudo bash /root/awg/manage_amneziawg.sh <command>`:
+
+> **How `manage` finds clients in the server config.** Every `[Peer]` created by my installer or by `manage add` has a marker comment `#_Name = <name>` on the first line of the block. That marker is what `list`, `remove`, `regen`, `modify` look up. If you are migrating `awg0.conf` from an older server or adding a peer by hand, include `#_Name = <name>` right after `[Peer]` — otherwise `manage` will not see the client. Example: the `[Peer]` block in the server config above (see [Configuration Examples](#config-examples-adv)).
 
 * **`add <name> [name2 ...] [--expires=DURATION]`:** Add one or multiple clients. In batch mode, `awg syncconf` is called once for all. With `--expires` — expiry applies to all clients.
 * **`remove <name> [name2 ...]`:** Remove one or multiple clients. In batch mode, apply_config is called once for all.
