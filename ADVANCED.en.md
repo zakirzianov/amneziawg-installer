@@ -1079,7 +1079,7 @@ sudo systemctl status awg-quick@awg0
 
 ### Does `manage_amneziawg.sh` work on top?
 
-My `manage_amneziawg.sh` targets a kernel-native setup (expects `/etc/amnezia/amneziawg/awgsetup_cfg.init`, relies on `awg-quick` + `awg` from `amneziawg-tools`). In theory it should work on top of a manual `amneziawg-go` + `amneziawg-tools` install, provided the interface is named `awg0` and `/etc/amnezia/amneziawg/` exists. I **do not test or support this path** — for full client management either edit configs manually or pick a userspace-oriented tool.
+My `manage_amneziawg.sh` targets a kernel-native setup (expects `/root/awg/awgsetup_cfg.init`, relies on `awg-quick` + `awg` from `amneziawg-tools`). In theory it should work on top of a manual `amneziawg-go` + `amneziawg-tools` install, provided the interface is named `awg0` and `/etc/amnezia/amneziawg/` exists. I **do not test or support this path** — for full client management either edit configs manually or pick a userspace-oriented tool.
 
 ### Source
 
