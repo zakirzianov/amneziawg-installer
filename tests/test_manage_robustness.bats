@@ -74,19 +74,19 @@ extract_func() {
     # critical files. Non-critical optional files may still use log_warn.
     # There must be no broad `|| true` next to cp -a of critical files
     # (KEYS_DIR, server_*.key, CONFIG_FILE).
-    ! grep -E 'cp -a "\$KEYS_DIR"/\*.*\|\| true' <<< "$body"
-    ! grep -E 'cp -a "\$AWG_DIR/server_private\.key".*\|\| true' <<< "$body"
-    ! grep -E 'cp -a "\$AWG_DIR/server_public\.key".*\|\| true' <<< "$body"
-    ! grep -E 'cp -a "\$CONFIG_FILE".*\|\| true' <<< "$body"
+    run grep -qE 'cp -a "\$KEYS_DIR"/\*.*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'cp -a "\$AWG_DIR/server_private\.key".*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'cp -a "\$AWG_DIR/server_public\.key".*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'cp -a "\$CONFIG_FILE".*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
 }
 
 @test "A1.1: EN removes silent '|| true' from critical paths" {
     local body
     body=$(extract_func "$MANAGE_EN" "_backup_configs_nolock")
-    ! grep -E 'cp -a "\$KEYS_DIR"/\*.*\|\| true' <<< "$body"
-    ! grep -E 'cp -a "\$AWG_DIR/server_private\.key".*\|\| true' <<< "$body"
-    ! grep -E 'cp -a "\$AWG_DIR/server_public\.key".*\|\| true' <<< "$body"
-    ! grep -E 'cp -a "\$CONFIG_FILE".*\|\| true' <<< "$body"
+    run grep -qE 'cp -a "\$KEYS_DIR"/\*.*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'cp -a "\$AWG_DIR/server_private\.key".*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'cp -a "\$AWG_DIR/server_public\.key".*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'cp -a "\$CONFIG_FILE".*\|\| true' <<< "$body"; [ "$status" -ne 0 ]
 }
 
 @test "A1.1: RU returns 1 (not die) on critical cp failure inside function" {
@@ -115,7 +115,7 @@ extract_func() {
     local body
     body=$(extract_func "$MANAGE_RU" "modify_client")
     # Must NOT have the old silent pattern `cp "$cf" "$bak" || log_warn`
-    ! grep -E 'cp "\$cf" "\$bak" \|\| log_warn' <<< "$body"
+    run grep -qE 'cp "\$cf" "\$bak" \|\| log_warn' <<< "$body"; [ "$status" -ne 0 ]
     # Must have the new hard-gate: `if ! cp "$cf" "$bak"; then ... return 1`
     grep -E 'if ! cp "\$cf" "\$bak"' <<< "$body"
 }
@@ -123,7 +123,7 @@ extract_func() {
 @test "A5.2: EN modify_client aborts if backup cp fails" {
     local body
     body=$(extract_func "$MANAGE_EN" "modify_client")
-    ! grep -E 'cp "\$cf" "\$bak" \|\| log_warn' <<< "$body"
+    run grep -qE 'cp "\$cf" "\$bak" \|\| log_warn' <<< "$body"; [ "$status" -ne 0 ]
     grep -E 'if ! cp "\$cf" "\$bak"' <<< "$body"
 }
 
@@ -199,13 +199,13 @@ extract_func() {
     # "bare" means sed -i on a line that is not preceded by `if ! ` and
     # not a pure substitution parameter escape (printf … | sed …).
     # Before fix there were 3 such lines at the end.
-    ! grep -E '^    sed -i ' <<< "$body"
+    run grep -qE '^    sed -i ' <<< "$body"; [ "$status" -ne 0 ]
 }
 
 @test "A5.3: EN regenerate_client has NO unchecked bare sed -i" {
     local body
     body=$(extract_func "$COMMON_EN" "regenerate_client")
-    ! grep -E '^    sed -i ' <<< "$body"
+    run grep -qE '^    sed -i ' <<< "$body"; [ "$status" -ne 0 ]
 }
 
 @test "A5.3: RU regenerate_client releases lock before QR generation" {

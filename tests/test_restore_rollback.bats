@@ -203,7 +203,7 @@ extract_func() {
     local body
     body=$(extract_func "$MANAGE_RU" "_backup_configs_nolock")
     # Must NOT have the old silent 2>/dev/null || true for expiry/
-    ! grep -E 'cp -a "\$\{EXPIRY_DIR.*\|\| log_warn' <<< "$body"
+    run grep -qE 'cp -a "\$\{EXPIRY_DIR.*\|\| log_warn' <<< "$body"; [ "$status" -ne 0 ]
     # Must have if-block that returns 1 on failure for expiry/
     grep -qE 'if ! cp -a "\$\{EXPIRY_DIR' <<< "$body"
 }
@@ -211,21 +211,21 @@ extract_func() {
 @test "Q3: EN _backup_configs_nolock treats expiry/ as critical" {
     local body
     body=$(extract_func "$MANAGE_EN" "_backup_configs_nolock")
-    ! grep -E 'cp -a "\$\{EXPIRY_DIR.*\|\| log_warn' <<< "$body"
+    run grep -qE 'cp -a "\$\{EXPIRY_DIR.*\|\| log_warn' <<< "$body"; [ "$status" -ne 0 ]
     grep -qE 'if ! cp -a "\$\{EXPIRY_DIR' <<< "$body"
 }
 
 @test "Q3: RU _backup_configs_nolock treats awg-expiry cron as critical" {
     local body
     body=$(extract_func "$MANAGE_RU" "_backup_configs_nolock")
-    ! grep -E 'cp -a /etc/cron\.d/awg-expiry.*\|\| log_warn' <<< "$body"
+    run grep -qE 'cp -a /etc/cron\.d/awg-expiry.*\|\| log_warn' <<< "$body"; [ "$status" -ne 0 ]
     grep -qE 'if ! cp -a /etc/cron\.d/awg-expiry' <<< "$body"
 }
 
 @test "Q3: EN _backup_configs_nolock treats awg-expiry cron as critical" {
     local body
     body=$(extract_func "$MANAGE_EN" "_backup_configs_nolock")
-    ! grep -E 'cp -a /etc/cron\.d/awg-expiry.*\|\| log_warn' <<< "$body"
+    run grep -qE 'cp -a /etc/cron\.d/awg-expiry.*\|\| log_warn' <<< "$body"; [ "$status" -ne 0 ]
     grep -qE 'if ! cp -a /etc/cron\.d/awg-expiry' <<< "$body"
 }
 

@@ -48,8 +48,8 @@ setup() {
 }
 
 @test "arm-build.yml dropped Ubuntu 22.04 entry (no longer in supported list)" {
-    ! grep -qE 'ubuntu-2204-arm64' "$WF"
-    ! grep -qE 'image: ubuntu:22\.04' "$WF"
+    run grep -qE 'ubuntu-2204-arm64' "$WF"; [ "$status" -ne 0 ]
+    run grep -qE 'image: ubuntu:22\.04' "$WF"; [ "$status" -ne 0 ]
 }
 
 # -------------------------------------------------------------------------
@@ -81,15 +81,15 @@ setup() {
 @test "install_amneziawg.sh no longer maps 22.04 -> ubuntu-2204" {
     local body
     body=$(awk '/^_try_install_prebuilt_arm\(\) \{$/,/^}$/' "$INSTALL_RU")
-    ! grep -qE 'target_id="ubuntu-2204-arm64"' <<< "$body"
-    ! grep -qE 'OS_VERSION.*"22\.04"' <<< "$body"
+    run grep -qE 'target_id="ubuntu-2204-arm64"' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'OS_VERSION.*"22\.04"' <<< "$body"; [ "$status" -ne 0 ]
 }
 
 @test "install_amneziawg_en.sh no longer maps 22.04 -> ubuntu-2204" {
     local body
     body=$(awk '/^_try_install_prebuilt_arm\(\) \{$/,/^}$/' "$INSTALL_EN")
-    ! grep -qE 'target_id="ubuntu-2204-arm64"' <<< "$body"
-    ! grep -qE 'OS_VERSION.*"22\.04"' <<< "$body"
+    run grep -qE 'target_id="ubuntu-2204-arm64"' <<< "$body"; [ "$status" -ne 0 ]
+    run grep -qE 'OS_VERSION.*"22\.04"' <<< "$body"; [ "$status" -ne 0 ]
 }
 
 # -------------------------------------------------------------------------
