@@ -8,14 +8,14 @@ fi
 # ==============================================================================
 # Скрипт для управления пользователями (пирами) AmneziaWG 2.0
 # Автор: @bivlked
-# Версия: 5.10.0
-# Дата: 2026-04-16
+# Версия: 5.11.0
+# Дата: 2026-04-22
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Безопасный режим и Константы ---
 # shellcheck disable=SC2034
-SCRIPT_VERSION="5.10.0"
+SCRIPT_VERSION="5.11.0"
 set -o pipefail
 AWG_DIR="/root/awg"
 SERVER_CONF_FILE="/etc/amnezia/amneziawg/awg0.conf"
@@ -202,6 +202,17 @@ check_dependencies() {
 
 # Внутренняя функция: выполняет бэкап без захвата блокировки.
 # Вызывается только из контекста, где .awg_backup.lock уже удерживается.
+#
+# Контракт обработки ошибок (v5.11.0 A1.1):
+#   - Критичные артефакты (awg0.conf, CONFIG_FILE, server_*.key, клиентские
+#     *.conf, $KEYS_DIR/*) — при ошибке cp возвращает 1 (не продолжает
+#     молча). Повреждённый backup опаснее отсутствующего.
+#   - Опциональные (QR *.png, *.vpnuri, expiry/, cron) — ошибка cp → log_warn,
+#     продолжаем. Они восстанавливаются из конфига.
+#   - Отсутствие глобов (клиентов нет) отличается от cp-failure через
+#     compgen -G pre-check.
+# По успеху устанавливает LAST_BACKUP_PATH (используется restore_backup
+# для rollback snapshot).
 _backup_configs_nolock() {
     log "Создание бэкапа..."
     local bd="$AWG_DIR/backups"
@@ -213,14 +224,92 @@ _backup_configs_nolock() {
     td=$(manage_mktempdir) || die "Ошибка создания временной директории"
 
     mkdir -p "$td/server" "$td/clients" "$td/keys"
-    cp -a "$SERVER_CONF_FILE"* "$td/server/" 2>/dev/null
-    cp -a "$AWG_DIR"/*.conf "$AWG_DIR"/*.png "$AWG_DIR"/*.vpnuri "$CONFIG_FILE" "$td/clients/" 2>/dev/null || true
-    cp -a "$KEYS_DIR"/* "$td/keys/" 2>/dev/null || true
-    cp -a "$AWG_DIR/server_private.key" "$AWG_DIR/server_public.key" "$td/" 2>/dev/null || true
-    if [[ -d "${EXPIRY_DIR:-$AWG_DIR/expiry}" ]]; then
-        cp -a "${EXPIRY_DIR:-$AWG_DIR/expiry}" "$td/expiry" 2>/dev/null || true
+
+    # Серверный конфиг (mandatory)
+    if [[ -f "$SERVER_CONF_FILE" ]]; then
+        if ! cp -a "$SERVER_CONF_FILE" "$td/server/"; then
+            log_error "Не удалось сохранить $SERVER_CONF_FILE в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    else
+        log_warn "Серверный конфиг отсутствует ($SERVER_CONF_FILE) — в бэкап не попадёт."
     fi
-    [[ -f /etc/cron.d/awg-expiry ]] && cp -a /etc/cron.d/awg-expiry "$td/" 2>/dev/null || true
+    # Опциональные файлы рядом с awg0.conf (backup'ы от modify, и т.п.)
+    if compgen -G "${SERVER_CONF_FILE}.*" > /dev/null; then
+        cp -a "${SERVER_CONF_FILE}".* "$td/server/" 2>/dev/null || \
+            log_warn "Не удалось сохранить ${SERVER_CONF_FILE}.* (некритично)."
+    fi
+
+    # Метаданные клиентов (mandatory)
+    if [[ -f "$CONFIG_FILE" ]]; then
+        if ! cp -a "$CONFIG_FILE" "$td/clients/"; then
+            log_error "Не удалось сохранить $CONFIG_FILE в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    # Клиентские *.conf (critical если существуют)
+    if compgen -G "$AWG_DIR/*.conf" > /dev/null; then
+        if ! cp -a "$AWG_DIR"/*.conf "$td/clients/"; then
+            log_error "Не удалось сохранить клиентские *.conf в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    # QR-коды *.png (optional — перегенерируются из conf)
+    if compgen -G "$AWG_DIR/*.png" > /dev/null; then
+        cp -a "$AWG_DIR"/*.png "$td/clients/" 2>/dev/null || \
+            log_warn "Не удалось сохранить клиентские *.png (некритично)."
+    fi
+    # vpn:// URI (optional — перегенерируются)
+    if compgen -G "$AWG_DIR/*.vpnuri" > /dev/null; then
+        cp -a "$AWG_DIR"/*.vpnuri "$td/clients/" 2>/dev/null || \
+            log_warn "Не удалось сохранить клиентские *.vpnuri (некритично)."
+    fi
+
+    # Ключи клиентов (critical если существуют)
+    if compgen -G "$KEYS_DIR/*" > /dev/null; then
+        if ! cp -a "$KEYS_DIR"/* "$td/keys/"; then
+            log_error "Не удалось сохранить ключи клиентов ($KEYS_DIR) в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+
+    # Ключи сервера (mandatory если существуют)
+    if [[ -f "$AWG_DIR/server_private.key" ]]; then
+        if ! cp -a "$AWG_DIR/server_private.key" "$td/"; then
+            log_error "Не удалось сохранить server_private.key в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    if [[ -f "$AWG_DIR/server_public.key" ]]; then
+        if ! cp -a "$AWG_DIR/server_public.key" "$td/"; then
+            log_error "Не удалось сохранить server_public.key в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+
+    # Expiry (critical — Unix epoch метки не восстановимы из других конфигов).
+    # Потеря этих данных меняет поведение expiry-enforcement после restore.
+    if [[ -d "${EXPIRY_DIR:-$AWG_DIR/expiry}" ]]; then
+        if ! cp -a "${EXPIRY_DIR:-$AWG_DIR/expiry}" "$td/expiry"; then
+            log_error "Не удалось сохранить expiry/ в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    # Cron awg-expiry (critical — без него expiry-enforcement перестаёт работать).
+    if [[ -f /etc/cron.d/awg-expiry ]]; then
+        if ! cp -a /etc/cron.d/awg-expiry "$td/"; then
+            log_error "Не удалось сохранить /etc/cron.d/awg-expiry в бэкап."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
 
     tar -czf "$bf" -C "$td" . || { rm -rf "$td"; die "Ошибка tar $bf"; }
     log_debug "tar: архив создан $bf"
@@ -232,6 +321,7 @@ _backup_configs_nolock() {
         sort -nr | tail -n +11 | cut -d' ' -f2- | xargs -r rm -f || \
         log_warn "Ошибка удаления старых бэкапов"
 
+    LAST_BACKUP_PATH="$bf"
     log "Бэкап создан: $bf"
 }
 
@@ -248,6 +338,50 @@ backup_configs() {
     local _rc=$?
     exec {backup_lock_fd}>&-
     return "$_rc"
+}
+
+# Откат к pre-restore snapshot (v5.11.0 A5.1).
+# Вызывается из restore_backup при любой ошибке после начала destructive ops.
+# Извлекает snapshot из $1 и копирует файлы обратно в исходные пути, затем
+# пытается запустить сервис. Не критично, если cp какого-то файла провалится:
+# цель — вернуть систему в рабочее состояние best-effort, чтобы пользователь
+# не остался без VPN.
+_restore_do_rollback() {
+    local _snap="$1"
+    if [[ -z "$_snap" || ! -f "$_snap" ]]; then
+        log_error "Rollback snapshot недоступен ($_snap) — требуется ручное восстановление."
+        return 1
+    fi
+    log_warn "Откат к состоянию до restore ($(basename "$_snap"))..."
+    local _rtd
+    _rtd=$(manage_mktempdir) || {
+        log_error "Не удалось создать tmpdir для отката. Ручное: tar -xzf $_snap -C /"
+        return 1
+    }
+    if ! tar -xzf "$_snap" --no-same-owner --no-same-permissions -C "$_rtd" 2>/dev/null; then
+        rm -rf "$_rtd"
+        log_error "Не удалось распаковать rollback snapshot ($_snap). Ручное восстановление: tar -xzf $_snap -C <нужная папка>"
+        return 1
+    fi
+    local _scdir
+    _scdir=$(dirname "$SERVER_CONF_FILE")
+    [[ -d "$_rtd/server" ]] && cp -a "$_rtd/server/"* "$_scdir/" 2>/dev/null
+    [[ -d "$_rtd/clients" ]] && cp -a "$_rtd/clients/"* "$AWG_DIR/" 2>/dev/null
+    [[ -d "$_rtd/keys" ]] && cp -a "$_rtd/keys/"* "$KEYS_DIR/" 2>/dev/null
+    [[ -f "$_rtd/server_private.key" ]] && cp -a "$_rtd/server_private.key" "$AWG_DIR/" 2>/dev/null
+    [[ -f "$_rtd/server_public.key" ]] && cp -a "$_rtd/server_public.key" "$AWG_DIR/" 2>/dev/null
+    [[ -d "$_rtd/expiry" ]] && cp -a "$_rtd/expiry"/* "${EXPIRY_DIR:-$AWG_DIR/expiry}/" 2>/dev/null
+    [[ -f "$_rtd/awg-expiry" ]] && cp -a "$_rtd/awg-expiry" /etc/cron.d/awg-expiry 2>/dev/null
+    rm -rf "$_rtd"
+
+    log "Откат завершён — пытаюсь запустить сервис..."
+    if systemctl start awg-quick@awg0; then
+        log "Сервис запущен после отката."
+        return 0
+    else
+        log_error "Сервис не стартовал после отката — проверьте: systemctl status awg-quick@awg0"
+        return 1
+    fi
 }
 
 restore_backup() {
@@ -286,6 +420,18 @@ restore_backup() {
     log "Восстановление из $bf"
     if ! confirm_action "восстановить" "конфигурацию из '$bf'"; then return 1; fi
 
+    # v5.11.0 A5.1: rollback infrastructure.
+    # _rollback_snap заполнится после _backup_configs_nolock — до этого
+    # момента destructive ops не выполняются, откат не нужен.
+    # _destructive_ops_started=1 ставится перед первой деструктивной
+    # операцией (после systemctl stop) — rollback делаем только когда
+    # система реально изменена, иначе cp тех же байт это no-op overhead.
+    # _restore_ok=1 выставляется только на финальном успехе.
+    local _rollback_snap=""
+    local _restore_ok=0
+    local _destructive_ops_started=0
+    local td=""
+
     # Захват блокировки backup (внешняя) — предотвращает параллельные backup/restore
     local backup_lockfile="${AWG_DIR}/.awg_backup.lock"
     local backup_lock_fd
@@ -307,19 +453,40 @@ restore_backup() {
         return 1
     fi
 
+    # Cleanup-хук: вызывается на любом return (через trap RETURN).
+    # При _restore_ok=0 И _destructive_ops_started=1 → rollback к
+    # _rollback_snap. Всегда → удаление временной директории и снятие
+    # блокировок. Первым делом сбрасываем RETURN trap — bash `trap ...
+    # RETURN` имеет global lifetime и без очистки срабатывал бы на
+    # любом последующем return в этом shell.
+    _restore_cleanup() {
+        # Порядок важен: сначала захватываем $? (return-code функции
+        # restore_backup), потом снимаем RETURN trap. Swap сломал бы
+        # захват, т.к. `trap - RETURN` — builtin, затирает $? в 0.
+        # Реентранс невозможен: `local` и `trap -` не вызывают функций,
+        # а после `trap - RETURN` наш trap уже снят.
+        local _rc=$?
+        trap - RETURN
+        if [[ $_restore_ok -eq 0 && $_destructive_ops_started -eq 1 && -n "$_rollback_snap" ]]; then
+            _restore_do_rollback "$_rollback_snap" || true
+        fi
+        [[ -n "$td" && -d "$td" ]] && rm -rf "$td"
+        [[ -n "${config_lock_fd:-}" ]] && exec {config_lock_fd}>&- 2>/dev/null
+        [[ -n "${backup_lock_fd:-}" ]] && exec {backup_lock_fd}>&- 2>/dev/null
+        return $_rc
+    }
+    trap _restore_cleanup RETURN
+
     log "Создание бэкапа текущей..."
     if ! _backup_configs_nolock; then
         log_error "Не удалось создать бэкап текущей конфигурации."
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     fi
+    # Фиксируем rollback snapshot (устанавливается _backup_configs_nolock)
+    _rollback_snap="${LAST_BACKUP_PATH:-}"
 
-    local td
     td=$(manage_mktempdir) || {
         log_error "Ошибка создания временной директории"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     }
 
@@ -333,9 +500,6 @@ restore_backup() {
     local _tar_verbose _vline _tc
     _tar_verbose=$(tar -tvzf "$bf" 2>/dev/null) || {
         log_error "Не удалось прочитать содержимое архива $bf"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     }
     while IFS= read -r _vline; do
@@ -344,9 +508,6 @@ restore_backup() {
         case "$_tc" in
             b|c|p|h|l)
                 log_error "Архив содержит опасный тип файла ('${_tc}'): '${_vline}' — восстановление отменено."
-                rm -rf "$td"
-                exec {config_lock_fd}>&-
-                exec {backup_lock_fd}>&-
                 return 1
                 ;;
         esac
@@ -356,9 +517,6 @@ restore_backup() {
     local _tar_list _bad_entry
     _tar_list=$(tar -tzf "$bf" 2>/dev/null) || {
         log_error "Не удалось прочитать содержимое архива $bf"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     }
     while IFS= read -r _bad_entry; do
@@ -366,17 +524,11 @@ restore_backup() {
         # Абсолютные пути
         if [[ "$_bad_entry" == /* ]]; then
             log_error "Архив содержит абсолютный путь: '$_bad_entry' — восстановление отменено."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
             return 1
         fi
         # Parent directory traversal
         if [[ "$_bad_entry" == *..* ]]; then
             log_error "Архив содержит path traversal (..): '$_bad_entry' — восстановление отменено."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
             return 1
         fi
     done <<< "$_tar_list"
@@ -384,9 +536,6 @@ restore_backup() {
 
     if ! tar -xzf "$bf" --no-same-owner --no-same-permissions -C "$td"; then
         log_error "Ошибка tar $bf"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     fi
 
@@ -396,27 +545,23 @@ restore_backup() {
     if [[ -n "$_symlinks" ]]; then
         log_error "Архив содержит symlinks (возможная symlink attack):"
         while IFS= read -r _sl; do log_error "  $_sl → $(readlink "$_sl")"; done <<< "$_symlinks"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     fi
 
     log "Остановка сервиса..."
     systemctl stop awg-quick@awg0 || log_warn "Сервис не остановлен."
 
+    # С этого момента destructive ops. Все error paths → trap _restore_cleanup → rollback.
+    _destructive_ops_started=1
     if [[ -d "$td/server" ]]; then
         log "Восстановление конфига сервера..."
         local server_conf_dir
         server_conf_dir=$(dirname "$SERVER_CONF_FILE")
         mkdir -p "$server_conf_dir"
-        cp -a "$td/server/"* "$server_conf_dir/" || {
-            log_error "Ошибка копирования server — восстановление прервано."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/server/"* "$server_conf_dir/"; then
+            log_error "Ошибка копирования server — восстановление прервано (запуск отката)."
             return 1
-        }
+        fi
         chmod 600 "$server_conf_dir"/*.conf 2>/dev/null
         chmod 700 "$server_conf_dir"
         log_debug "Конфиг сервера восстановлен в $server_conf_dir"
@@ -424,13 +569,10 @@ restore_backup() {
 
     if [[ -d "$td/clients" ]]; then
         log "Восстановление файлов клиентов..."
-        cp -a "$td/clients/"* "$AWG_DIR/" || {
-            log_error "Ошибка копирования clients — восстановление прервано."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/clients/"* "$AWG_DIR/"; then
+            log_error "Ошибка копирования clients — восстановление прервано (запуск отката)."
             return 1
-        }
+        fi
         chmod 600 "$AWG_DIR"/*.conf 2>/dev/null
         chmod 600 "$AWG_DIR"/*.png 2>/dev/null
         chmod 600 "$AWG_DIR"/*.vpnuri 2>/dev/null
@@ -441,13 +583,10 @@ restore_backup() {
     if [[ -d "$td/keys" ]]; then
         log "Восстановление ключей..."
         mkdir -p "$KEYS_DIR"
-        cp -a "$td/keys/"* "$KEYS_DIR/" || {
-            log_error "Ошибка копирования keys — восстановление прервано."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/keys/"* "$KEYS_DIR/"; then
+            log_error "Ошибка копирования keys — восстановление прервано (запуск отката)."
             return 1
-        }
+        fi
         chmod 600 "$KEYS_DIR"/* 2>/dev/null
         log_debug "Ключи восстановлены в $KEYS_DIR"
     fi
@@ -455,23 +594,17 @@ restore_backup() {
     # Серверные ключи: cp -a сохраняет mode из архива, поэтому форсируем 600
     # независимо от того с какими правами они лежали в backup-е (audit fix).
     if [[ -f "$td/server_private.key" ]]; then
-        cp -a "$td/server_private.key" "$AWG_DIR/" || {
-            log_error "Ошибка копирования server_private.key — восстановление прервано."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/server_private.key" "$AWG_DIR/"; then
+            log_error "Ошибка копирования server_private.key — восстановление прервано (запуск отката)."
             return 1
-        }
+        fi
         chmod 600 "$AWG_DIR/server_private.key" 2>/dev/null || true
     fi
     if [[ -f "$td/server_public.key" ]]; then
-        cp -a "$td/server_public.key" "$AWG_DIR/" || {
-            log_error "Ошибка копирования server_public.key — восстановление прервано."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/server_public.key" "$AWG_DIR/"; then
+            log_error "Ошибка копирования server_public.key — восстановление прервано (запуск отката)."
             return 1
-        }
+        fi
         chmod 600 "$AWG_DIR/server_public.key" 2>/dev/null || true
     fi
 
@@ -486,21 +619,27 @@ restore_backup() {
         chmod 644 /etc/cron.d/awg-expiry
     fi
 
-    rm -rf "$td"
-
-    # Снимаем блокировки до старта сервиса — файловые операции завершены
-    exec {config_lock_fd}>&-
-    exec {backup_lock_fd}>&-
+    # Pre-flight: валидация восстановленного конфига ДО старта сервиса.
+    # Если конфиг invalid — сервис гарантированно упадёт, лучше откатиться
+    # сейчас и объяснить причину, чем стартовать сломанный awg-quick@awg0.
+    if ! validate_awg_config >/dev/null 2>&1; then
+        log_error "Восстановленный серверный конфиг не прошёл валидацию — запуск отката."
+        return 1
+    fi
 
     log "Запуск сервиса..."
     if ! systemctl start awg-quick@awg0; then
-        log_error "Ошибка запуска сервиса!"
+        log_error "Ошибка запуска сервиса — запуск отката."
         local status_out
         status_out=$(systemctl status awg-quick@awg0 --no-pager 2>&1) || true
         while IFS= read -r line; do log_error "  $line"; done <<< "$status_out"
         return 1
     fi
+
+    # Успех — rollback не нужен, trap выполнит только cleanup
+    _restore_ok=1
     log "Восстановление завершено."
+    return 0
 }
 
 # ==============================================================================
@@ -554,6 +693,7 @@ modify_client() {
     exec {modify_lock_fd}>"$modify_lockfile"
     if ! flock -x -w 10 "$modify_lock_fd"; then
         log_error "Не удалось получить блокировку конфигурации (другая операция выполняется)"
+        exec {modify_lock_fd}>&-
         return 1
     fi
 
@@ -574,7 +714,13 @@ modify_client() {
     log "Изменение '$param' на '$value' для '$name'..."
     local bak
     bak="${cf}.bak-$(date +%F_%H-%M-%S)"
-    cp "$cf" "$bak" || log_warn "Ошибка бэкапа $bak"
+    # v5.11.0 A5.2: бэкап критически важен — если cp провалился, без бэкапа
+    # destructive sed может повредить конфиг без возможности отката. Выходим.
+    if ! cp "$cf" "$bak"; then
+        log_error "Не удалось создать бэкап '$bak' — destructive sed отменён."
+        exec {modify_lock_fd}>&-
+        return 1
+    fi
     log "Бэкап: $bak"
 
     local escaped_value

@@ -8,14 +8,14 @@ fi
 # ==============================================================================
 # AmneziaWG 2.0 peer management script
 # Author: @bivlked
-# Version: 5.10.1
-# Date: 2026-04-16
+# Version: 5.11.0
+# Date: 2026-04-22
 # Repository: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Safe mode and Constants ---
 # shellcheck disable=SC2034
-SCRIPT_VERSION="5.10.1"
+SCRIPT_VERSION="5.11.0"
 set -o pipefail
 AWG_DIR="/root/awg"
 SERVER_CONF_FILE="/etc/amnezia/amneziawg/awg0.conf"
@@ -202,6 +202,17 @@ check_dependencies() {
 
 # Internal function: performs backup without acquiring a lock.
 # Called only from a context where .awg_backup.lock is already held.
+#
+# Error handling contract (v5.11.0 A1.1):
+#   - Critical artifacts (awg0.conf, CONFIG_FILE, server_*.key, client
+#     *.conf, $KEYS_DIR/*) — on cp failure, return 1 (no silent skip).
+#     A corrupted backup is more dangerous than a missing one.
+#   - Optional (QR *.png, *.vpnuri, expiry/, cron) — cp failure → log_warn,
+#     continue. They can be regenerated from config.
+#   - Missing globs (no clients yet) is distinguished from cp-failure via
+#     compgen -G pre-check.
+# On success, sets LAST_BACKUP_PATH (used by restore_backup for rollback
+# snapshot).
 _backup_configs_nolock() {
     log "Creating backup..."
     local bd="$AWG_DIR/backups"
@@ -213,14 +224,93 @@ _backup_configs_nolock() {
     td=$(manage_mktempdir) || die "Failed to create temp directory"
 
     mkdir -p "$td/server" "$td/clients" "$td/keys"
-    cp -a "$SERVER_CONF_FILE"* "$td/server/" 2>/dev/null
-    cp -a "$AWG_DIR"/*.conf "$AWG_DIR"/*.png "$AWG_DIR"/*.vpnuri "$CONFIG_FILE" "$td/clients/" 2>/dev/null || true
-    cp -a "$KEYS_DIR"/* "$td/keys/" 2>/dev/null || true
-    cp -a "$AWG_DIR/server_private.key" "$AWG_DIR/server_public.key" "$td/" 2>/dev/null || true
-    if [[ -d "${EXPIRY_DIR:-$AWG_DIR/expiry}" ]]; then
-        cp -a "${EXPIRY_DIR:-$AWG_DIR/expiry}" "$td/expiry" 2>/dev/null || true
+
+    # Server config (mandatory)
+    if [[ -f "$SERVER_CONF_FILE" ]]; then
+        if ! cp -a "$SERVER_CONF_FILE" "$td/server/"; then
+            log_error "Failed to save $SERVER_CONF_FILE to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    else
+        log_warn "Server config missing ($SERVER_CONF_FILE) — will not be in backup."
     fi
-    [[ -f /etc/cron.d/awg-expiry ]] && cp -a /etc/cron.d/awg-expiry "$td/" 2>/dev/null || true
+    # Optional sidecar files next to awg0.conf (modify backups, etc.)
+    if compgen -G "${SERVER_CONF_FILE}.*" > /dev/null; then
+        cp -a "${SERVER_CONF_FILE}".* "$td/server/" 2>/dev/null || \
+            log_warn "Failed to save ${SERVER_CONF_FILE}.* (non-critical)."
+    fi
+
+    # Client metadata (mandatory)
+    if [[ -f "$CONFIG_FILE" ]]; then
+        if ! cp -a "$CONFIG_FILE" "$td/clients/"; then
+            log_error "Failed to save $CONFIG_FILE to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    # Client *.conf (critical when present)
+    if compgen -G "$AWG_DIR/*.conf" > /dev/null; then
+        if ! cp -a "$AWG_DIR"/*.conf "$td/clients/"; then
+            log_error "Failed to save client *.conf files to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    # QR codes *.png (optional — regenerated from conf)
+    if compgen -G "$AWG_DIR/*.png" > /dev/null; then
+        cp -a "$AWG_DIR"/*.png "$td/clients/" 2>/dev/null || \
+            log_warn "Failed to save client *.png (non-critical)."
+    fi
+    # vpn:// URIs (optional — regenerated)
+    if compgen -G "$AWG_DIR/*.vpnuri" > /dev/null; then
+        cp -a "$AWG_DIR"/*.vpnuri "$td/clients/" 2>/dev/null || \
+            log_warn "Failed to save client *.vpnuri (non-critical)."
+    fi
+
+    # Client keys (critical when present)
+    if compgen -G "$KEYS_DIR/*" > /dev/null; then
+        if ! cp -a "$KEYS_DIR"/* "$td/keys/"; then
+            log_error "Failed to save client keys ($KEYS_DIR) to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+
+    # Server keys (mandatory when present)
+    if [[ -f "$AWG_DIR/server_private.key" ]]; then
+        if ! cp -a "$AWG_DIR/server_private.key" "$td/"; then
+            log_error "Failed to save server_private.key to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    if [[ -f "$AWG_DIR/server_public.key" ]]; then
+        if ! cp -a "$AWG_DIR/server_public.key" "$td/"; then
+            log_error "Failed to save server_public.key to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+
+    # Expiry (critical — Unix epoch timestamps cannot be recovered from
+    # other configs). Losing this data changes expiry-enforcement behavior
+    # after restore.
+    if [[ -d "${EXPIRY_DIR:-$AWG_DIR/expiry}" ]]; then
+        if ! cp -a "${EXPIRY_DIR:-$AWG_DIR/expiry}" "$td/expiry"; then
+            log_error "Failed to save expiry/ to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
+    # Cron awg-expiry (critical — without it expiry-enforcement stops working).
+    if [[ -f /etc/cron.d/awg-expiry ]]; then
+        if ! cp -a /etc/cron.d/awg-expiry "$td/"; then
+            log_error "Failed to save /etc/cron.d/awg-expiry to backup."
+            rm -rf "$td"
+            return 1
+        fi
+    fi
 
     tar -czf "$bf" -C "$td" . || { rm -rf "$td"; die "tar error $bf"; }
     log_debug "tar: archive created $bf"
@@ -232,6 +322,7 @@ _backup_configs_nolock() {
         sort -nr | tail -n +11 | cut -d' ' -f2- | xargs -r rm -f || \
         log_warn "Error deleting old backups"
 
+    LAST_BACKUP_PATH="$bf"
     log "Backup created: $bf"
 }
 
@@ -248,6 +339,50 @@ backup_configs() {
     local _rc=$?
     exec {backup_lock_fd}>&-
     return "$_rc"
+}
+
+# Roll back to pre-restore snapshot (v5.11.0 A5.1).
+# Called from restore_backup on any error after destructive ops start.
+# Extracts the snapshot from $1 and copies files back to their original
+# locations, then tries to start the service. Non-fatal if a particular
+# cp fails: the goal is best-effort return to a working state so the
+# user is not left without a VPN.
+_restore_do_rollback() {
+    local _snap="$1"
+    if [[ -z "$_snap" || ! -f "$_snap" ]]; then
+        log_error "Rollback snapshot unavailable ($_snap) — manual recovery required."
+        return 1
+    fi
+    log_warn "Rolling back to pre-restore state ($(basename "$_snap"))..."
+    local _rtd
+    _rtd=$(manage_mktempdir) || {
+        log_error "Failed to create rollback tmpdir. Manual: tar -xzf $_snap -C /"
+        return 1
+    }
+    if ! tar -xzf "$_snap" --no-same-owner --no-same-permissions -C "$_rtd" 2>/dev/null; then
+        rm -rf "$_rtd"
+        log_error "Failed to unpack rollback snapshot ($_snap). Manual recovery: tar -xzf $_snap -C <target dir>"
+        return 1
+    fi
+    local _scdir
+    _scdir=$(dirname "$SERVER_CONF_FILE")
+    [[ -d "$_rtd/server" ]] && cp -a "$_rtd/server/"* "$_scdir/" 2>/dev/null
+    [[ -d "$_rtd/clients" ]] && cp -a "$_rtd/clients/"* "$AWG_DIR/" 2>/dev/null
+    [[ -d "$_rtd/keys" ]] && cp -a "$_rtd/keys/"* "$KEYS_DIR/" 2>/dev/null
+    [[ -f "$_rtd/server_private.key" ]] && cp -a "$_rtd/server_private.key" "$AWG_DIR/" 2>/dev/null
+    [[ -f "$_rtd/server_public.key" ]] && cp -a "$_rtd/server_public.key" "$AWG_DIR/" 2>/dev/null
+    [[ -d "$_rtd/expiry" ]] && cp -a "$_rtd/expiry"/* "${EXPIRY_DIR:-$AWG_DIR/expiry}/" 2>/dev/null
+    [[ -f "$_rtd/awg-expiry" ]] && cp -a "$_rtd/awg-expiry" /etc/cron.d/awg-expiry 2>/dev/null
+    rm -rf "$_rtd"
+
+    log "Rollback done — attempting to start service..."
+    if systemctl start awg-quick@awg0; then
+        log "Service started after rollback."
+        return 0
+    else
+        log_error "Service did not start after rollback — check: systemctl status awg-quick@awg0"
+        return 1
+    fi
 }
 
 restore_backup() {
@@ -286,6 +421,19 @@ restore_backup() {
     log "Restoring from $bf"
     if ! confirm_action "restore" "configuration from '$bf'"; then return 1; fi
 
+    # v5.11.0 A5.1: rollback infrastructure.
+    # _rollback_snap is populated after _backup_configs_nolock — until that
+    # point no destructive ops run, so no rollback is needed.
+    # _destructive_ops_started=1 is set before the first destructive op
+    # (after systemctl stop). We roll back only when the system has
+    # actually been modified — otherwise copying the same bytes back is
+    # needless overhead.
+    # _restore_ok=1 is set only on final success.
+    local _rollback_snap=""
+    local _restore_ok=0
+    local _destructive_ops_started=0
+    local td=""
+
     # Acquire backup lock (outer) — prevents concurrent backup/restore operations
     local backup_lockfile="${AWG_DIR}/.awg_backup.lock"
     local backup_lock_fd
@@ -307,19 +455,41 @@ restore_backup() {
         return 1
     fi
 
+    # Cleanup hook: fires on every return (via trap RETURN).
+    # Rollback only when _restore_ok=0 AND _destructive_ops_started=1
+    # AND _rollback_snap is captured. Always → remove temp dir and
+    # release locks. First we clear the RETURN trap — bash's `trap ...
+    # RETURN` has global lifetime, without this it would fire on any
+    # subsequent return in this shell.
+    _restore_cleanup() {
+        # Order matters: capture $? (return code from restore_backup)
+        # FIRST, then clear the RETURN trap. Swapping would break $?
+        # capture because `trap - RETURN` is a builtin that clobbers
+        # $? to 0. Reentrancy is impossible: `local` and `trap -` do
+        # not invoke functions, and once `trap - RETURN` runs, our
+        # trap is off.
+        local _rc=$?
+        trap - RETURN
+        if [[ $_restore_ok -eq 0 && $_destructive_ops_started -eq 1 && -n "$_rollback_snap" ]]; then
+            _restore_do_rollback "$_rollback_snap" || true
+        fi
+        [[ -n "$td" && -d "$td" ]] && rm -rf "$td"
+        [[ -n "${config_lock_fd:-}" ]] && exec {config_lock_fd}>&- 2>/dev/null
+        [[ -n "${backup_lock_fd:-}" ]] && exec {backup_lock_fd}>&- 2>/dev/null
+        return $_rc
+    }
+    trap _restore_cleanup RETURN
+
     log "Backing up current config..."
     if ! _backup_configs_nolock; then
         log_error "Failed to create backup of current configuration."
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     fi
+    # Capture rollback snapshot (set by _backup_configs_nolock)
+    _rollback_snap="${LAST_BACKUP_PATH:-}"
 
-    local td
     td=$(manage_mktempdir) || {
         log_error "Failed to create temp directory"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     }
 
@@ -333,9 +503,6 @@ restore_backup() {
     local _tar_verbose _vline _tc
     _tar_verbose=$(tar -tvzf "$bf" 2>/dev/null) || {
         log_error "Cannot read archive contents: $bf"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     }
     while IFS= read -r _vline; do
@@ -344,9 +511,6 @@ restore_backup() {
         case "$_tc" in
             b|c|p|h|l)
                 log_error "Archive contains dangerous entry type ('${_tc}'): '${_vline}' — restore aborted."
-                rm -rf "$td"
-                exec {config_lock_fd}>&-
-                exec {backup_lock_fd}>&-
                 return 1
                 ;;
         esac
@@ -356,9 +520,6 @@ restore_backup() {
     local _tar_list _bad_entry
     _tar_list=$(tar -tzf "$bf" 2>/dev/null) || {
         log_error "Cannot read archive contents: $bf"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     }
     while IFS= read -r _bad_entry; do
@@ -366,17 +527,11 @@ restore_backup() {
         # Absolute paths
         if [[ "$_bad_entry" == /* ]]; then
             log_error "Archive contains absolute path: '$_bad_entry' — restore aborted."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
             return 1
         fi
         # Parent directory traversal
         if [[ "$_bad_entry" == *..* ]]; then
             log_error "Archive contains path traversal (..): '$_bad_entry' — restore aborted."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
             return 1
         fi
     done <<< "$_tar_list"
@@ -384,9 +539,6 @@ restore_backup() {
 
     if ! tar -xzf "$bf" --no-same-owner --no-same-permissions -C "$td"; then
         log_error "tar error $bf"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     fi
 
@@ -396,27 +548,23 @@ restore_backup() {
     if [[ -n "$_symlinks" ]]; then
         log_error "Archive contains symlinks (possible symlink attack):"
         while IFS= read -r _sl; do log_error "  $_sl -> $(readlink "$_sl")"; done <<< "$_symlinks"
-        rm -rf "$td"
-        exec {config_lock_fd}>&-
-        exec {backup_lock_fd}>&-
         return 1
     fi
 
     log "Stopping service..."
     systemctl stop awg-quick@awg0 || log_warn "Service not stopped."
 
+    # From here on destructive ops. All error paths → trap _restore_cleanup → rollback.
+    _destructive_ops_started=1
     if [[ -d "$td/server" ]]; then
         log "Restoring server config..."
         local server_conf_dir
         server_conf_dir=$(dirname "$SERVER_CONF_FILE")
         mkdir -p "$server_conf_dir"
-        cp -a "$td/server/"* "$server_conf_dir/" || {
-            log_error "Error copying server — restore aborted."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/server/"* "$server_conf_dir/"; then
+            log_error "Error copying server — restore aborted (triggering rollback)."
             return 1
-        }
+        fi
         chmod 600 "$server_conf_dir"/*.conf 2>/dev/null
         chmod 700 "$server_conf_dir"
         log_debug "Server config restored to $server_conf_dir"
@@ -424,13 +572,10 @@ restore_backup() {
 
     if [[ -d "$td/clients" ]]; then
         log "Restoring client files..."
-        cp -a "$td/clients/"* "$AWG_DIR/" || {
-            log_error "Error copying clients — restore aborted."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/clients/"* "$AWG_DIR/"; then
+            log_error "Error copying clients — restore aborted (triggering rollback)."
             return 1
-        }
+        fi
         chmod 600 "$AWG_DIR"/*.conf 2>/dev/null
         chmod 600 "$AWG_DIR"/*.png 2>/dev/null
         chmod 600 "$AWG_DIR"/*.vpnuri 2>/dev/null
@@ -441,13 +586,10 @@ restore_backup() {
     if [[ -d "$td/keys" ]]; then
         log "Restoring keys..."
         mkdir -p "$KEYS_DIR"
-        cp -a "$td/keys/"* "$KEYS_DIR/" || {
-            log_error "Error copying keys — restore aborted."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/keys/"* "$KEYS_DIR/"; then
+            log_error "Error copying keys — restore aborted (triggering rollback)."
             return 1
-        }
+        fi
         chmod 600 "$KEYS_DIR"/* 2>/dev/null
         log_debug "Keys restored to $KEYS_DIR"
     fi
@@ -455,23 +597,17 @@ restore_backup() {
     # Server keys: cp -a preserves the mode from the archive, so we force 600
     # regardless of the mode they had inside the backup (audit fix).
     if [[ -f "$td/server_private.key" ]]; then
-        cp -a "$td/server_private.key" "$AWG_DIR/" || {
-            log_error "Error copying server_private.key — restore aborted."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/server_private.key" "$AWG_DIR/"; then
+            log_error "Error copying server_private.key — restore aborted (triggering rollback)."
             return 1
-        }
+        fi
         chmod 600 "$AWG_DIR/server_private.key" 2>/dev/null || true
     fi
     if [[ -f "$td/server_public.key" ]]; then
-        cp -a "$td/server_public.key" "$AWG_DIR/" || {
-            log_error "Error copying server_public.key — restore aborted."
-            rm -rf "$td"
-            exec {config_lock_fd}>&-
-            exec {backup_lock_fd}>&-
+        if ! cp -a "$td/server_public.key" "$AWG_DIR/"; then
+            log_error "Error copying server_public.key — restore aborted (triggering rollback)."
             return 1
-        }
+        fi
         chmod 600 "$AWG_DIR/server_public.key" 2>/dev/null || true
     fi
 
@@ -486,21 +622,27 @@ restore_backup() {
         chmod 644 /etc/cron.d/awg-expiry
     fi
 
-    rm -rf "$td"
-
-    # Release locks before starting service — file operations complete
-    exec {config_lock_fd}>&-
-    exec {backup_lock_fd}>&-
+    # Pre-flight: validate restored config BEFORE starting the service.
+    # If the config is invalid awg-quick@awg0 will definitely fail — better
+    # to roll back now and explain why than to start a broken service.
+    if ! validate_awg_config >/dev/null 2>&1; then
+        log_error "Restored server config failed validation — triggering rollback."
+        return 1
+    fi
 
     log "Starting service..."
     if ! systemctl start awg-quick@awg0; then
-        log_error "Service start error!"
+        log_error "Service start error — triggering rollback."
         local status_out
         status_out=$(systemctl status awg-quick@awg0 --no-pager 2>&1) || true
         while IFS= read -r line; do log_error "  $line"; done <<< "$status_out"
         return 1
     fi
+
+    # Success — rollback not needed, trap only performs cleanup
+    _restore_ok=1
     log "Restore completed."
+    return 0
 }
 
 # ==============================================================================
@@ -554,6 +696,7 @@ modify_client() {
     exec {modify_lock_fd}>"$modify_lockfile"
     if ! flock -x -w 10 "$modify_lock_fd"; then
         log_error "Could not acquire config lock (another operation in progress)"
+        exec {modify_lock_fd}>&-
         return 1
     fi
 
@@ -574,7 +717,13 @@ modify_client() {
     log "Changing '$param' to '$value' for '$name'..."
     local bak
     bak="${cf}.bak-$(date +%F_%H-%M-%S)"
-    cp "$cf" "$bak" || log_warn "Backup error $bak"
+    # v5.11.0 A5.2: backup is critical — without it a destructive sed can
+    # corrupt the config with no way back. Abort if the backup cp fails.
+    if ! cp "$cf" "$bak"; then
+        log_error "Failed to create backup '$bak' — destructive sed aborted."
+        exec {modify_lock_fd}>&-
+        return 1
+    fi
     log "Backup: $bak"
 
     local escaped_value

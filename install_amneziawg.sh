@@ -8,15 +8,15 @@ fi
 # ==============================================================================
 # Скрипт для установки и настройки AmneziaWG 2.0 на Ubuntu/Debian серверах
 # Автор: @bivlked
-# Версия: 5.10.2
-# Дата: 2026-04-20
+# Версия: 5.11.0
+# Дата: 2026-04-22
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Безопасный режим и Константы ---
 set -o pipefail
 
-SCRIPT_VERSION="5.10.2"
+SCRIPT_VERSION="5.11.0"
 AWG_DIR="/root/awg"
 CONFIG_FILE="$AWG_DIR/awgsetup_cfg.init"
 STATE_FILE="$AWG_DIR/setup_state"
@@ -33,8 +33,8 @@ MANAGE_SCRIPT_PATH="$AWG_DIR/manage_amneziawg.sh"
 # Проверяются в step5_download_scripts() после curl.
 # Если AWG_BRANCH переопределён (не v$SCRIPT_VERSION), проверка пропускается.
 # Формат: sha256sum output (hex, 64 chars).
-COMMON_SCRIPT_SHA256="0a87babc87310aebcf739fbdb379ad7acce563c3a81a6f753baca8c67d38c575"
-MANAGE_SCRIPT_SHA256="d81c75b932dc9fb9ed52f82974e70255f7a3a37b7cc0a2b2d613a74344038065"
+COMMON_SCRIPT_SHA256="75dbde00093506fbac506ad06063b62eb7fcec1e5a4edcec65cd950eca95b9b9"
+MANAGE_SCRIPT_SHA256="cfb220d297ce63df472a9f25ca94dc1cb2a98ed565c9e049ee504348a7262227"
 
 # Флаги CLI
 UNINSTALL=0; HELP=0; DIAGNOSTIC=0; VERBOSE=0; NO_COLOR=0; AUTO_YES=0; NO_TWEAKS=0
@@ -220,10 +220,16 @@ EOF
 update_state() {
     local next_step=$1
     mkdir -p "$(dirname "$STATE_FILE")"
-    # Атомарная запись с flock для предотвращения race condition
+    # Атомарная запись: tmp-файл + flock + mv. Защита от битого
+    # состояния при crash/power-loss между write и close.
     (
         flock -x 200
-        echo "$next_step" > "$STATE_FILE"
+        local tmp="${STATE_FILE}.tmp.$BASHPID"
+        if printf '%s\n' "$next_step" > "$tmp" && mv -f "$tmp" "$STATE_FILE"; then
+            exit 0
+        fi
+        rm -f "$tmp" 2>/dev/null
+        exit 1
     ) 200>"${STATE_FILE}.lock" || die "Ошибка записи состояния"
     log "Состояние: следующий шаг - $next_step"
 }
@@ -231,6 +237,17 @@ update_state() {
 request_reboot() {
     local next_step=$1
     update_state "$next_step"
+
+    # Перед reboot-gate 1→2 сохраняем boot_id. На входе step 2
+    # сравниваем с текущим — если совпадает, reboot не произошёл
+    # и DKMS соберёт модуль под старое ядро (которое после следующего
+    # reboot будет уже apt full-upgrade'нутым и не подхватит модуль).
+    if [[ "$next_step" == "2" ]] && [[ -r /proc/sys/kernel/random/boot_id ]]; then
+        if cat /proc/sys/kernel/random/boot_id > "$AWG_DIR/.boot_id_before_step2" 2>/dev/null; then
+            log_debug "boot_id captured before reboot"
+        fi
+    fi
+
     echo "" >> "$LOG_FILE"
     log_warn "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
     log_warn "!!! ТРЕБУЕТСЯ ПЕРЕЗАГРУЗКА СИСТЕМЫ                        !!!"
@@ -1666,8 +1683,10 @@ _try_install_prebuilt_arm() {
         target_id="rpi-bookworm-armhf"
     elif [[ "$kernel" == *-generic* && "${OS_VERSION:-}" == "24.04" ]]; then
         target_id="ubuntu-2404-arm64"
-    elif [[ "$kernel" == *-generic* && "${OS_VERSION:-}" == "22.04" ]]; then
-        target_id="ubuntu-2204-arm64"
+    elif [[ "$kernel" == *-generic* && "${OS_VERSION:-}" == "25.10" ]]; then
+        target_id="ubuntu-2510-arm64"
+    elif [[ "$kernel" == *-arm64* && "${OS_ID:-}" == "debian" && "${OS_VERSION:-}" == "13" ]]; then
+        target_id="debian-trixie-arm64"
     elif [[ "$kernel" == *-arm64* && "${OS_ID:-}" == "debian" ]]; then
         target_id="debian-bookworm-arm64"
     else
@@ -1725,6 +1744,25 @@ _try_install_prebuilt_arm() {
 
 step2_install_amnezia() {
     update_state 2
+
+    # Guard: убедиться что юзер действительно перезагрузился перед step 2.
+    # Если boot_id совпадает с сохранённым в request_reboot 2 — reboot
+    # не произошёл (например, юзер случайно запустил скрипт повторно).
+    # В этом случае apt full-upgrade из step 1 подложил новое ядро на диск,
+    # но работающее ядро всё ещё старое → DKMS соберёт модуль под старое,
+    # после следующего reboot modprobe упадёт.
+    local boot_id_file="$AWG_DIR/.boot_id_before_step2"
+    if [[ -f "$boot_id_file" ]] && [[ -r /proc/sys/kernel/random/boot_id ]]; then
+        local saved_boot_id current_boot_id
+        saved_boot_id=$(< "$boot_id_file")
+        current_boot_id=$(< /proc/sys/kernel/random/boot_id)
+        if [[ -n "$saved_boot_id" ]] && [[ "$saved_boot_id" == "$current_boot_id" ]]; then
+            die "Ожидалась перезагрузка перед шагом 2 (kernel upgrade активируется только после reboot). Выполните: sudo reboot — и запустите скрипт снова."
+        fi
+        log "Подтверждена перезагрузка (boot_id изменился) — продолжаем шаг 2"
+        rm -f "$boot_id_file" 2>/dev/null || true
+    fi
+
     log "### ШАГ 2: Установка AmneziaWG и зависимостей ###"
     _APT_UPDATED=0  # Reset: new sources will be added in this step
 
@@ -1766,10 +1804,23 @@ step2_install_amnezia() {
     else
         mkdir -p "$keyring_dir"
         log "Импорт GPG ключа Amnezia PPA..."
-        curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x57290828" \
-            | gpg --dearmor -o "$keyring_file" \
-            || die "Ошибка импорта GPG ключа Amnezia PPA."
-        chmod 644 "$keyring_file"
+        # Atomic: pipe в temp, затем mv — полу-записанный keyring никогда не
+        # окажется на целевом пути, даже если curl/gpg упали mid-way.
+        local _kf_tmp
+        _kf_tmp=$(mktemp -p "$keyring_dir" ".amnezia-ppa.gpg.tmp.XXXXXX") \
+            || die "Не удалось создать временный файл для GPG ключа."
+        # --batch --no-tty --yes: gpg не открывает /dev/tty (non-interactive
+        # SSH, cloud-init, Ansible и т.п.) и не падает с "File exists" при
+        # overwrite mktemp-файла. Без этих флагов gpg в батч-режиме откажется
+        # писать в уже существующий пустой tmp-файл от mktemp.
+        if ! curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x57290828" \
+             | gpg --batch --no-tty --yes --dearmor -o "$_kf_tmp"; then
+            rm -f "$_kf_tmp" 2>/dev/null
+            die "Ошибка импорта GPG ключа Amnezia PPA."
+        fi
+        chmod 644 "$_kf_tmp" || { rm -f "$_kf_tmp" 2>/dev/null; die "Ошибка chmod GPG ключа."; }
+        mv -f "$_kf_tmp" "$keyring_file" \
+            || { rm -f "$_kf_tmp" 2>/dev/null; die "Ошибка перемещения GPG ключа."; }
 
         # Debian 12 использует traditional .list формат, Debian 13+ и Ubuntu 24.04+ — DEB822 .sources
         if [[ "${OS_ID:-ubuntu}" == "debian" && "${OS_VERSION}" == "12" ]]; then
@@ -1958,32 +2009,51 @@ verify_sha256() {
     return 0
 }
 
+# _secure_download <url> <target> <expected_sha256> <label>
+# Atomic download:
+#   1. curl → mktemp на том же FS, что и target;
+#   2. verify_sha256 на temp (не на target, чтобы corrupt-файл не оказался
+#      на целевом пути даже на долю секунды);
+#   3. chmod 700 на temp;
+#   4. mv -f temp → target (атомарный rename).
+# Если любой шаг падает — temp удаляется, target не трогается.
+_secure_download() {
+    local url="$1" target="$2" expected_sha256="$3" label="$4"
+    local tmp target_dir
+    target_dir=$(dirname "$target")
+    tmp=$(mktemp -p "$target_dir" ".${label//\//_}.tmp.XXXXXX") \
+        || die "Не удалось создать временный файл для $label"
+    if ! curl -fLso "$tmp" --max-time 60 --retry 2 "$url"; then
+        rm -f "$tmp" 2>/dev/null
+        die "Ошибка скачивания $label"
+    fi
+    if ! verify_sha256 "$tmp" "$expected_sha256" "$label"; then
+        rm -f "$tmp" 2>/dev/null
+        die "Целостность $label не подтверждена (SHA256 mismatch). Установка прервана."
+    fi
+    if ! chmod 700 "$tmp"; then
+        rm -f "$tmp" 2>/dev/null
+        die "Ошибка chmod $label"
+    fi
+    if ! mv -f "$tmp" "$target"; then
+        rm -f "$tmp" 2>/dev/null
+        die "Ошибка перемещения $label на целевой путь"
+    fi
+    log "$label скачан и верифицирован."
+}
+
 step5_download_scripts() {
     update_state 5
     log "### ШАГ 5: Скачивание скриптов управления ###"
     cd "$AWG_DIR" || die "Ошибка перехода в $AWG_DIR"
 
-    # Скачивание awg_common.sh
     log "Скачивание $COMMON_SCRIPT_PATH..."
-    if curl -fLso "$COMMON_SCRIPT_PATH" --max-time 60 --retry 2 "$COMMON_SCRIPT_URL"; then
-        chmod 700 "$COMMON_SCRIPT_PATH" || die "Ошибка chmod awg_common.sh"
-        verify_sha256 "$COMMON_SCRIPT_PATH" "$COMMON_SCRIPT_SHA256" "awg_common.sh" || \
-            die "Целостность awg_common.sh не подтверждена (SHA256 mismatch). Установка прервана."
-        log "awg_common.sh скачан и верифицирован."
-    else
-        die "Ошибка скачивания awg_common.sh"
-    fi
+    _secure_download "$COMMON_SCRIPT_URL" "$COMMON_SCRIPT_PATH" \
+        "$COMMON_SCRIPT_SHA256" "awg_common.sh"
 
-    # Скачивание manage_amneziawg.sh
     log "Скачивание $MANAGE_SCRIPT_PATH..."
-    if curl -fLso "$MANAGE_SCRIPT_PATH" --max-time 60 --retry 2 "$MANAGE_SCRIPT_URL"; then
-        chmod 700 "$MANAGE_SCRIPT_PATH" || die "Ошибка chmod manage_amneziawg.sh"
-        verify_sha256 "$MANAGE_SCRIPT_PATH" "$MANAGE_SCRIPT_SHA256" "manage_amneziawg.sh" || \
-            die "Целостность manage_amneziawg.sh не подтверждена (SHA256 mismatch). Установка прервана."
-        log "manage_amneziawg.sh скачан и верифицирован."
-    else
-        die "Ошибка скачивания manage_amneziawg.sh"
-    fi
+    _secure_download "$MANAGE_SCRIPT_URL" "$MANAGE_SCRIPT_PATH" \
+        "$MANAGE_SCRIPT_SHA256" "manage_amneziawg.sh"
 
     log "Шаг 5 завершен."
     update_state 6
@@ -2144,7 +2214,7 @@ step99_finish() {
 
     # Удаление файла состояния
     log "Удаление файла состояния установки..."
-    rm -f "$STATE_FILE" "${STATE_FILE}.lock" || log_warn "Не удалось удалить $STATE_FILE"
+    rm -f "$STATE_FILE" "${STATE_FILE}.lock" "$AWG_DIR/.boot_id_before_step2" || log_warn "Не удалось удалить $STATE_FILE"
     log "Установка полностью завершена. Лог: $LOG_FILE"
     log "=============================================================================="
 }

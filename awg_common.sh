@@ -3,8 +3,8 @@
 # ==============================================================================
 # Общая библиотека функций для AmneziaWG 2.0
 # Автор: @bivlked
-# Версия: 5.10.2
-# Дата: 2026-04-20
+# Версия: 5.11.0
+# Дата: 2026-04-22
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 #
@@ -1016,6 +1016,19 @@ generate_client() {
 
 # Перегенерация конфига и QR для существующего клиента
 # regenerate_client <name> [endpoint]
+#
+# v5.11.0 A5.3: защищается блокировкой .awg_config.lock (сериализация
+# с modify_client / remove и параллельными regen на том же имени) и
+# проверяет возврат каждого sed -i при восстановлении пользовательских
+# настроек — прежде молча игнорировались ошибки sed.
+#
+# Lock scope: держится только пока мутируется $AWG_DIR/${name}.conf.
+# generate_qr / generate_vpn_uri вызываются ВНЕ lock как best-effort
+# derived artifacts — если между sed-ом и QR-генерацией concurrent
+# modify успеет изменить conf, QR может устареть на один такт. Это
+# приемлемо: клиент получит актуальный QR на следующей операции.
+# Включать QR/URI в lock дороже (lock на несколько секунд — модифицирует
+# не только этот клиент), без выигрыша по целостности server-state.
 regenerate_client() {
     local name="$1"
     local endpoint="${2:-}"
@@ -1025,11 +1038,23 @@ regenerate_client() {
         return 1
     fi
 
-    load_awg_params || return 1
+    # Межпроцессная блокировка: защита от race с modify_client/remove и
+    # параллельных regen на одном имени клиента.
+    local lockfile="${AWG_DIR}/.awg_config.lock"
+    local lock_fd
+    exec {lock_fd}>"$lockfile"
+    if ! flock -x -w 10 "$lock_fd"; then
+        log_error "Не удалось получить блокировку конфига (другая операция выполняется)"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
+    load_awg_params || { exec {lock_fd}>&-; return 1; }
 
     # Проверяем, что клиент существует в серверном конфиге
     if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE" 2>/dev/null; then
         log_error "Клиент '$name' не найден в серверном конфиге"
+        exec {lock_fd}>&-
         return 1
     fi
 
@@ -1044,6 +1069,7 @@ regenerate_client() {
 
     if [[ -z "$client_privkey" ]]; then
         log_error "Приватный ключ клиента '$name' не найден"
+        exec {lock_fd}>&-
         return 1
     fi
 
@@ -1058,11 +1084,13 @@ regenerate_client() {
 
     if [[ -z "$client_ip" ]]; then
         log_error "IP клиента '$name' не найден в серверном конфиге"
+        exec {lock_fd}>&-
         return 1
     fi
 
     server_pubkey=$(cat "$AWG_DIR/server_public.key" 2>/dev/null) || {
         log_error "Публичный ключ сервера не найден"
+        exec {lock_fd}>&-
         return 1
     }
 
@@ -1075,6 +1103,7 @@ regenerate_client() {
     fi
     if [[ -z "$endpoint" ]]; then
         log_error "Не удалось определить внешний IP сервера."
+        exec {lock_fd}>&-
         return 1
     fi
 
@@ -1091,16 +1120,35 @@ regenerate_client() {
     fi
 
     # Перегенерация конфига
-    render_client_config "$name" "$client_ip" "$client_privkey" "$server_pubkey" "$endpoint" "${AWG_PORT}" || return 1
+    render_client_config "$name" "$client_ip" "$client_privkey" "$server_pubkey" "$endpoint" "${AWG_PORT}" || {
+        exec {lock_fd}>&-
+        return 1
+    }
 
     # Восстанавливаем пользовательские настройки (экранируем & и \ для sed replacement)
     local _dns _ka _aip
     _dns=$(printf '%s' "$current_dns" | sed 's/[&\\/]/\\&/g')
     _ka=$(printf '%s' "$current_keepalive" | sed 's/[&\\/]/\\&/g')
     _aip=$(printf '%s' "$current_allowed_ips" | sed 's/[&\\/]/\\&/g')
-    sed -i "s/^DNS = .*/DNS = ${_dns}/" "$AWG_DIR/${name}.conf"
-    sed -i "s/^PersistentKeepalive = .*/PersistentKeepalive = ${_ka}/" "$AWG_DIR/${name}.conf"
-    sed -i "s|^AllowedIPs = .*|AllowedIPs = ${_aip}|" "$AWG_DIR/${name}.conf"
+    local _client_conf="$AWG_DIR/${name}.conf"
+    if ! sed -i "s/^DNS = .*/DNS = ${_dns}/" "$_client_conf"; then
+        log_error "Ошибка sed при записи DNS в $_client_conf"
+        exec {lock_fd}>&-
+        return 1
+    fi
+    if ! sed -i "s/^PersistentKeepalive = .*/PersistentKeepalive = ${_ka}/" "$_client_conf"; then
+        log_error "Ошибка sed при записи PersistentKeepalive в $_client_conf"
+        exec {lock_fd}>&-
+        return 1
+    fi
+    if ! sed -i "s|^AllowedIPs = .*|AllowedIPs = ${_aip}|" "$_client_conf"; then
+        log_error "Ошибка sed при записи AllowedIPs в $_client_conf"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
+    # Освобождаем блокировку — конфиг записан, дальше некритичные операции
+    exec {lock_fd}>&-
 
     # QR-код
     generate_qr "$name"

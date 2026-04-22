@@ -3,8 +3,8 @@
 # ==============================================================================
 # Shared function library for AmneziaWG 2.0
 # Author: @bivlked
-# Version: 5.10.2
-# Date: 2026-04-20
+# Version: 5.11.0
+# Date: 2026-04-22
 # Repository: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 #
@@ -1016,6 +1016,19 @@ generate_client() {
 
 # Regenerate config and QR for existing client
 # regenerate_client <name> [endpoint]
+#
+# v5.11.0 A5.3: protected by .awg_config.lock (serializes with
+# modify_client / remove and concurrent regens on the same client) and
+# checks the return code of each sed -i that restores user settings —
+# previously sed failures were silently ignored.
+#
+# Lock scope: held only while mutating $AWG_DIR/${name}.conf.
+# generate_qr / generate_vpn_uri are called OUTSIDE the lock as
+# best-effort derived artifacts — if a concurrent modify changes the
+# conf between our sed and QR generation, the QR may be stale by one
+# tick. Acceptable: the client gets an up-to-date QR on the next
+# operation. Including QR/URI in the lock is more expensive (holding
+# the lock for several seconds) with no server-state integrity gain.
 regenerate_client() {
     local name="$1"
     local endpoint="${2:-}"
@@ -1025,11 +1038,23 @@ regenerate_client() {
         return 1
     fi
 
-    load_awg_params || return 1
+    # Cross-process lock: guards against races with modify_client/remove
+    # and concurrent regens on the same client name.
+    local lockfile="${AWG_DIR}/.awg_config.lock"
+    local lock_fd
+    exec {lock_fd}>"$lockfile"
+    if ! flock -x -w 10 "$lock_fd"; then
+        log_error "Failed to acquire config lock (another operation is running)"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
+    load_awg_params || { exec {lock_fd}>&-; return 1; }
 
     # Check that client exists in server config
     if ! grep -qxF "#_Name = ${name}" "$SERVER_CONF_FILE" 2>/dev/null; then
         log_error "Client '$name' not found in server config"
+        exec {lock_fd}>&-
         return 1
     fi
 
@@ -1044,6 +1069,7 @@ regenerate_client() {
 
     if [[ -z "$client_privkey" ]]; then
         log_error "Private key for client '$name' not found"
+        exec {lock_fd}>&-
         return 1
     fi
 
@@ -1058,11 +1084,13 @@ regenerate_client() {
 
     if [[ -z "$client_ip" ]]; then
         log_error "Client IP for '$name' not found in server config"
+        exec {lock_fd}>&-
         return 1
     fi
 
     server_pubkey=$(cat "$AWG_DIR/server_public.key" 2>/dev/null) || {
         log_error "Server public key not found"
+        exec {lock_fd}>&-
         return 1
     }
 
@@ -1075,6 +1103,7 @@ regenerate_client() {
     fi
     if [[ -z "$endpoint" ]]; then
         log_error "Failed to determine server public IP."
+        exec {lock_fd}>&-
         return 1
     fi
 
@@ -1091,16 +1120,35 @@ regenerate_client() {
     fi
 
     # Config regeneration
-    render_client_config "$name" "$client_ip" "$client_privkey" "$server_pubkey" "$endpoint" "${AWG_PORT}" || return 1
+    render_client_config "$name" "$client_ip" "$client_privkey" "$server_pubkey" "$endpoint" "${AWG_PORT}" || {
+        exec {lock_fd}>&-
+        return 1
+    }
 
     # Restore user settings (escape & and \ for sed replacement)
     local _dns _ka _aip
     _dns=$(printf '%s' "$current_dns" | sed 's/[&\\/]/\\&/g')
     _ka=$(printf '%s' "$current_keepalive" | sed 's/[&\\/]/\\&/g')
     _aip=$(printf '%s' "$current_allowed_ips" | sed 's/[&\\/]/\\&/g')
-    sed -i "s/^DNS = .*/DNS = ${_dns}/" "$AWG_DIR/${name}.conf"
-    sed -i "s/^PersistentKeepalive = .*/PersistentKeepalive = ${_ka}/" "$AWG_DIR/${name}.conf"
-    sed -i "s|^AllowedIPs = .*|AllowedIPs = ${_aip}|" "$AWG_DIR/${name}.conf"
+    local _client_conf="$AWG_DIR/${name}.conf"
+    if ! sed -i "s/^DNS = .*/DNS = ${_dns}/" "$_client_conf"; then
+        log_error "sed error writing DNS to $_client_conf"
+        exec {lock_fd}>&-
+        return 1
+    fi
+    if ! sed -i "s/^PersistentKeepalive = .*/PersistentKeepalive = ${_ka}/" "$_client_conf"; then
+        log_error "sed error writing PersistentKeepalive to $_client_conf"
+        exec {lock_fd}>&-
+        return 1
+    fi
+    if ! sed -i "s|^AllowedIPs = .*|AllowedIPs = ${_aip}|" "$_client_conf"; then
+        log_error "sed error writing AllowedIPs to $_client_conf"
+        exec {lock_fd}>&-
+        return 1
+    fi
+
+    # Release lock — config written, remaining ops are non-critical
+    exec {lock_fd}>&-
 
     # QR code
     generate_qr "$name"
