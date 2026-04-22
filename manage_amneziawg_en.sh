@@ -293,15 +293,23 @@ _backup_configs_nolock() {
         fi
     fi
 
-    # Expiry (optional)
+    # Expiry (critical — Unix epoch timestamps cannot be recovered from
+    # other configs). Losing this data changes expiry-enforcement behavior
+    # after restore.
     if [[ -d "${EXPIRY_DIR:-$AWG_DIR/expiry}" ]]; then
-        cp -a "${EXPIRY_DIR:-$AWG_DIR/expiry}" "$td/expiry" 2>/dev/null || \
-            log_warn "Failed to save expiry/ (non-critical)."
+        if ! cp -a "${EXPIRY_DIR:-$AWG_DIR/expiry}" "$td/expiry"; then
+            log_error "Failed to save expiry/ to backup."
+            rm -rf "$td"
+            return 1
+        fi
     fi
-    # Cron (optional)
+    # Cron awg-expiry (critical — without it expiry-enforcement stops working).
     if [[ -f /etc/cron.d/awg-expiry ]]; then
-        cp -a /etc/cron.d/awg-expiry "$td/" 2>/dev/null || \
-            log_warn "Failed to save awg-expiry cron (non-critical)."
+        if ! cp -a /etc/cron.d/awg-expiry "$td/"; then
+            log_error "Failed to save /etc/cron.d/awg-expiry to backup."
+            rm -rf "$td"
+            return 1
+        fi
     fi
 
     tar -czf "$bf" -C "$td" . || { rm -rf "$td"; die "tar error $bf"; }
@@ -416,9 +424,14 @@ restore_backup() {
     # v5.11.0 A5.1: rollback infrastructure.
     # _rollback_snap is populated after _backup_configs_nolock — until that
     # point no destructive ops run, so no rollback is needed.
+    # _destructive_ops_started=1 is set before the first destructive op
+    # (after systemctl stop). We roll back only when the system has
+    # actually been modified — otherwise copying the same bytes back is
+    # needless overhead.
     # _restore_ok=1 is set only on final success.
     local _rollback_snap=""
     local _restore_ok=0
+    local _destructive_ops_started=0
     local td=""
 
     # Acquire backup lock (outer) — prevents concurrent backup/restore operations
@@ -443,11 +456,21 @@ restore_backup() {
     fi
 
     # Cleanup hook: fires on every return (via trap RETURN).
-    # When _restore_ok=0 → rollback to _rollback_snap. Always → remove
-    # temp dir and release locks.
+    # Rollback only when _restore_ok=0 AND _destructive_ops_started=1
+    # AND _rollback_snap is captured. Always → remove temp dir and
+    # release locks. First we clear the RETURN trap — bash's `trap ...
+    # RETURN` has global lifetime, without this it would fire on any
+    # subsequent return in this shell (Codex Q1).
     _restore_cleanup() {
+        # Order matters: capture $? (return code from restore_backup)
+        # FIRST, then clear the RETURN trap. Swapping would break $?
+        # capture because `trap - RETURN` is a builtin that clobbers
+        # $? to 0. Reentrancy is impossible: `local` and `trap -` do
+        # not invoke functions, and once `trap - RETURN` runs, our
+        # trap is off.
         local _rc=$?
-        if [[ $_restore_ok -eq 0 && -n "$_rollback_snap" ]]; then
+        trap - RETURN
+        if [[ $_restore_ok -eq 0 && $_destructive_ops_started -eq 1 && -n "$_rollback_snap" ]]; then
             _restore_do_rollback "$_rollback_snap" || true
         fi
         [[ -n "$td" && -d "$td" ]] && rm -rf "$td"
@@ -532,6 +555,7 @@ restore_backup() {
     systemctl stop awg-quick@awg0 || log_warn "Service not stopped."
 
     # From here on destructive ops. All error paths → trap _restore_cleanup → rollback.
+    _destructive_ops_started=1
     if [[ -d "$td/server" ]]; then
         log "Restoring server config..."
         local server_conf_dir
@@ -672,6 +696,7 @@ modify_client() {
     exec {modify_lock_fd}>"$modify_lockfile"
     if ! flock -x -w 10 "$modify_lock_fd"; then
         log_error "Could not acquire config lock (another operation in progress)"
+        exec {modify_lock_fd}>&-
         return 1
     fi
 

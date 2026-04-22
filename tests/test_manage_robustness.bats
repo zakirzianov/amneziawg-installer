@@ -138,6 +138,25 @@ extract_func() {
         grep -qE 'exec \{modify_lock_fd\}>&-'
 }
 
+@test "Q5: RU modify_client releases modify_lock_fd on flock timeout" {
+    local body
+    body=$(extract_func "$MANAGE_RU" "modify_client")
+    # The flock -w timeout path must close the fd before return 1 — a
+    # leaked fd would keep the config lockfile open until modify_client's
+    # caller (the main shell) exits.
+    # Extract the block from `flock -x -w 10 "$modify_lock_fd"` through
+    # the matching `fi`, and verify it contains the fd close.
+    awk '/flock -x -w 10 "\$modify_lock_fd"/,/^    fi/ { print }' <<< "$body" | \
+        head -6 | grep -qE 'exec \{modify_lock_fd\}>&-'
+}
+
+@test "Q5: EN modify_client releases modify_lock_fd on flock timeout" {
+    local body
+    body=$(extract_func "$MANAGE_EN" "modify_client")
+    awk '/flock -x -w 10 "\$modify_lock_fd"/,/^    fi/ { print }' <<< "$body" | \
+        head -6 | grep -qE 'exec \{modify_lock_fd\}>&-'
+}
+
 # -------------------------------------------------------------------------
 # A5.3 — regenerate_client lock + sed -i checks
 # -------------------------------------------------------------------------

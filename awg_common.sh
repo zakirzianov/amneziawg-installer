@@ -1021,6 +1021,14 @@ generate_client() {
 # с modify_client / remove и параллельными regen на том же имени) и
 # проверяет возврат каждого sed -i при восстановлении пользовательских
 # настроек — прежде молча игнорировались ошибки sed.
+#
+# Lock scope: держится только пока мутируется $AWG_DIR/${name}.conf.
+# generate_qr / generate_vpn_uri вызываются ВНЕ lock как best-effort
+# derived artifacts — если между sed-ом и QR-генерацией concurrent
+# modify успеет изменить conf, QR может устареть на один такт. Это
+# приемлемо: клиент получит актуальный QR на следующей операции.
+# Включать QR/URI в lock дороже (lock на несколько секунд — модифицирует
+# не только этот клиент), без выигрыша по целостности server-state.
 regenerate_client() {
     local name="$1"
     local endpoint="${2:-}"

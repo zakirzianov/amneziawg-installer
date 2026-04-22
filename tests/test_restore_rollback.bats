@@ -145,14 +145,88 @@ extract_func() {
 @test "A5.1: RU _restore_cleanup invokes _restore_do_rollback only when not ok" {
     local body
     body=$(extract_func "$MANAGE_RU" "restore_backup")
-    # The cleanup block must gate rollback on `_restore_ok -eq 0`.
-    grep -qE '_restore_ok -eq 0.*_rollback_snap' <<< "$body"
+    # The cleanup block must gate rollback on `_restore_ok -eq 0` AND
+    # `_destructive_ops_started -eq 1` (Codex Q2 fix).
+    grep -qE '_restore_ok -eq 0.*_destructive_ops_started -eq 1.*_rollback_snap' <<< "$body"
 }
 
 @test "A5.1: EN _restore_cleanup invokes _restore_do_rollback only when not ok" {
     local body
     body=$(extract_func "$MANAGE_EN" "restore_backup")
-    grep -qE '_restore_ok -eq 0.*_rollback_snap' <<< "$body"
+    grep -qE '_restore_ok -eq 0.*_destructive_ops_started -eq 1.*_rollback_snap' <<< "$body"
+}
+
+# -------------------------------------------------------------------------
+# Post-audit fixes (Codex Q1/Q2/Q3)
+# -------------------------------------------------------------------------
+
+@test "Q1: RU _restore_cleanup clears RETURN trap to prevent global leak" {
+    local body
+    body=$(extract_func "$MANAGE_RU" "restore_backup")
+    # trap - RETURN must be inside _restore_cleanup to clear the global
+    # RETURN trap and prevent reentrancy / leak to callers.
+    grep -qE 'trap - RETURN' <<< "$body"
+}
+
+@test "Q1: EN _restore_cleanup clears RETURN trap to prevent global leak" {
+    local body
+    body=$(extract_func "$MANAGE_EN" "restore_backup")
+    grep -qE 'trap - RETURN' <<< "$body"
+}
+
+@test "Q2: RU restore_backup sets _destructive_ops_started after systemctl stop" {
+    local body
+    body=$(extract_func "$MANAGE_RU" "restore_backup")
+    # The flag must transition from 0 to 1 exactly around systemctl stop
+    # — rollback only meaningful once state is actually modified.
+    # Use a pattern matching only code lines (not comments).
+    local sline dline
+    sline=$(grep -nE '^[[:space:]]+systemctl stop awg-quick@awg0' <<< "$body" | head -1 | cut -d: -f1)
+    dline=$(grep -nE '^[[:space:]]+_destructive_ops_started=1$' <<< "$body" | head -1 | cut -d: -f1)
+    [ -n "$sline" ]
+    [ -n "$dline" ]
+    [ "$dline" -gt "$sline" ]
+}
+
+@test "Q2: EN restore_backup sets _destructive_ops_started after systemctl stop" {
+    local body
+    body=$(extract_func "$MANAGE_EN" "restore_backup")
+    local sline dline
+    sline=$(grep -nE '^[[:space:]]+systemctl stop awg-quick@awg0' <<< "$body" | head -1 | cut -d: -f1)
+    dline=$(grep -nE '^[[:space:]]+_destructive_ops_started=1$' <<< "$body" | head -1 | cut -d: -f1)
+    [ -n "$sline" ]
+    [ -n "$dline" ]
+    [ "$dline" -gt "$sline" ]
+}
+
+@test "Q3: RU _backup_configs_nolock treats expiry/ as critical" {
+    local body
+    body=$(extract_func "$MANAGE_RU" "_backup_configs_nolock")
+    # Must NOT have the old silent 2>/dev/null || true for expiry/
+    ! grep -E 'cp -a "\$\{EXPIRY_DIR.*\|\| log_warn' <<< "$body"
+    # Must have if-block that returns 1 on failure for expiry/
+    grep -qE 'if ! cp -a "\$\{EXPIRY_DIR' <<< "$body"
+}
+
+@test "Q3: EN _backup_configs_nolock treats expiry/ as critical" {
+    local body
+    body=$(extract_func "$MANAGE_EN" "_backup_configs_nolock")
+    ! grep -E 'cp -a "\$\{EXPIRY_DIR.*\|\| log_warn' <<< "$body"
+    grep -qE 'if ! cp -a "\$\{EXPIRY_DIR' <<< "$body"
+}
+
+@test "Q3: RU _backup_configs_nolock treats awg-expiry cron as critical" {
+    local body
+    body=$(extract_func "$MANAGE_RU" "_backup_configs_nolock")
+    ! grep -E 'cp -a /etc/cron\.d/awg-expiry.*\|\| log_warn' <<< "$body"
+    grep -qE 'if ! cp -a /etc/cron\.d/awg-expiry' <<< "$body"
+}
+
+@test "Q3: EN _backup_configs_nolock treats awg-expiry cron as critical" {
+    local body
+    body=$(extract_func "$MANAGE_EN" "_backup_configs_nolock")
+    ! grep -E 'cp -a /etc/cron\.d/awg-expiry.*\|\| log_warn' <<< "$body"
+    grep -qE 'if ! cp -a /etc/cron\.d/awg-expiry' <<< "$body"
 }
 
 # -------------------------------------------------------------------------

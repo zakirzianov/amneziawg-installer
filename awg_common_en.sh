@@ -1021,6 +1021,14 @@ generate_client() {
 # modify_client / remove and concurrent regens on the same client) and
 # checks the return code of each sed -i that restores user settings —
 # previously sed failures were silently ignored.
+#
+# Lock scope: held only while mutating $AWG_DIR/${name}.conf.
+# generate_qr / generate_vpn_uri are called OUTSIDE the lock as
+# best-effort derived artifacts — if a concurrent modify changes the
+# conf between our sed and QR generation, the QR may be stale by one
+# tick. Acceptable: the client gets an up-to-date QR on the next
+# operation. Including QR/URI in the lock is more expensive (holding
+# the lock for several seconds) with no server-state integrity gain.
 regenerate_client() {
     local name="$1"
     local endpoint="${2:-}"
