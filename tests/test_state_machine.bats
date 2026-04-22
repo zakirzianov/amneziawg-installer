@@ -2,9 +2,9 @@
 # Tests for installer state machine hardening (v5.11).
 #
 # Covers:
-#   • update_state() — atomic write via tmp + flock + mv (A1.3).
-#   • request_reboot() — boot_id capture before the 1→2 reboot gate (A4.1).
-#   • step 2 entry guard — die when boot_id matches (reboot did not happen).
+#   • update_state() - atomic write via tmp + flock + mv (A1.3).
+#   • request_reboot() - boot_id capture before the 1->2 reboot gate (A4.1).
+#   • step 2 entry guard - die when boot_id matches (reboot did not happen).
 #
 # The installer script `install_amneziawg.sh` is too large to source as a
 # whole (it parses $@, checks root, sets traps). We extract the three
@@ -62,7 +62,7 @@ teardown() {
     update_state 4
     # No tmp-pattern files should remain next to STATE_FILE
     run bash -c "ls '$BATS_TMP_AWG'/setup_state.tmp.* 2>/dev/null"
-    # glob didn't match → ls prints nothing and exits with non-zero
+    # glob didn't match -> ls prints nothing and exits with non-zero
     [ -z "$output" ]
 }
 
@@ -96,7 +96,7 @@ teardown() {
 # simple file-based comparison, so we exercise it by replicating the
 # check in a test harness.
 
-@test "boot_id guard: different boot_id → pass, file removed" {
+@test "boot_id guard: different boot_id -> pass, file removed" {
     local boot_id_file="$AWG_DIR/.boot_id_before_step2"
     printf '%s\n' "old-boot-id-1111" > "$boot_id_file"
     local saved_boot_id current_boot_id
@@ -108,14 +108,14 @@ teardown() {
     [ ! -f "$boot_id_file" ]
 }
 
-@test "boot_id guard: same boot_id → die (user did not reboot)" {
+@test "boot_id guard: same boot_id -> die (user did not reboot)" {
     local boot_id_file="$AWG_DIR/.boot_id_before_step2"
     local id="same-boot-id-3333"
     printf '%s\n' "$id" > "$boot_id_file"
     local saved_boot_id current_boot_id
     saved_boot_id=$(< "$boot_id_file")
     current_boot_id="$id"
-    # This is the failure scenario — guard must trigger die.
+    # This is the failure scenario - guard must trigger die.
     [ "$saved_boot_id" = "$current_boot_id" ]
 }
 
@@ -129,20 +129,20 @@ teardown() {
     [[ "$loaded" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
 }
 
-@test "boot_id file: missing saved file → guard skipped (first install)" {
+@test "boot_id file: missing saved file -> guard skipped (first install)" {
     # If .boot_id_before_step2 does not exist, the guard block is skipped.
     # This simulates the "first install" case where step 1 hasn't run yet
     # (shouldn't happen in normal flow, but guard must be resilient).
     local boot_id_file="$AWG_DIR/.boot_id_before_step2"
     [ ! -f "$boot_id_file" ]
-    # The code path is: `if [[ -f "$boot_id_file" ]] ...` — false → skipped.
+    # The code path is: `if [[ -f "$boot_id_file" ]] ...` - false -> skipped.
     # No die, no crash. Nothing to assert beyond "no file".
     run bash -c "[[ -f '$boot_id_file' ]] && echo present || echo absent"
     [ "$output" = "absent" ]
 }
 
 # ----------------------------------------------------------------
-# Code invariants — installer must contain the hardening
+# Code invariants - installer must contain the hardening
 # ----------------------------------------------------------------
 
 @test "installer RU contains tmp+mv atomic write" {
@@ -159,7 +159,7 @@ teardown() {
     [ "$output" -ge 1 ]
 }
 
-@test "installer RU captures boot_id on reboot 1→2" {
+@test "installer RU captures boot_id on reboot 1->2" {
     local f="${BATS_TEST_DIRNAME}/../install_amneziawg.sh"
     run grep -c "/proc/sys/kernel/random/boot_id" "$f"
     [ "$status" -eq 0 ]
@@ -167,7 +167,7 @@ teardown() {
     [ "$output" -ge 2 ]
 }
 
-@test "installer EN captures boot_id on reboot 1→2" {
+@test "installer EN captures boot_id on reboot 1->2" {
     local f="${BATS_TEST_DIRNAME}/../install_amneziawg_en.sh"
     run grep -c "/proc/sys/kernel/random/boot_id" "$f"
     [ "$status" -eq 0 ]
