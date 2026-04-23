@@ -116,3 +116,102 @@ setup_params() {
     grep -qE '\-\-psk' "$MANAGE_RU"
     grep -qE '\-\-psk' "$MANAGE_EN"
 }
+
+@test "regenerate_client preserves PresharedKey through regen" {
+    # If a client was added with --psk, the PSK lives in BOTH server [Peer]
+    # and client .conf. Regen rewrites the client .conf from scratch via
+    # render_client_config; without explicit PSK preservation the client
+    # would lose its PSK while the server peer still holds it, breaking
+    # the handshake. Fix in v5.11.1: regenerate_client reads the existing
+    # PresharedKey from the client conf and passes it through CLIENT_PSK.
+    require_flock
+    mock_awg
+    create_server_config
+    create_init_config
+    mkdir -p "$KEYS_DIR"
+    echo "SERVER_PRIV" > "$AWG_DIR/server_private.key"
+    echo "SERVER_PUB"  > "$AWG_DIR/server_public.key"
+    echo "CLIENT_PRIV_ABC" > "$KEYS_DIR/pskuser.private"
+    echo "CLIENT_PUB_ABC"  > "$KEYS_DIR/pskuser.public"
+    # Seed the server conf with a peer matching the client name + pubkey
+    cat >> "$SERVER_CONF_FILE" <<'EOF'
+
+[Peer]
+#_Name = pskuser
+PublicKey = CLIENT_PUB_ABC
+PresharedKey = EXISTING_PSK_VALUE_32B==
+AllowedIPs = 10.9.9.5/32
+EOF
+    # Seed an existing client conf that already has the PSK
+    cat > "$AWG_DIR/pskuser.conf" <<'EOF'
+[Interface]
+PrivateKey = CLIENT_PRIV_ABC
+Address = 10.9.9.5/32
+DNS = 1.1.1.1
+MTU = 1280
+
+[Peer]
+PublicKey = SERVER_PUB
+PresharedKey = EXISTING_PSK_VALUE_32B==
+Endpoint = 203.0.113.1:39743
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 33
+EOF
+
+    # Ensure CLIENT_PSK is not pre-exported
+    unset CLIENT_PSK
+
+    # Mock get_server_public_ip so regen does not hit the network
+    # shellcheck disable=SC2317
+    get_server_public_ip() { echo "203.0.113.1"; return 0; }
+    export -f get_server_public_ip
+
+    run regenerate_client "pskuser"
+    [ "$status" -eq 0 ]
+    # PSK must still be in the regenerated client .conf
+    run grep -c '^PresharedKey = EXISTING_PSK_VALUE_32B==$' "$AWG_DIR/pskuser.conf"
+    [ "$output" = "1" ]
+    # After successful regen, CLIENT_PSK must be unset (hygiene)
+    [ -z "${CLIENT_PSK+x}" ]
+}
+
+@test "regenerate_client: client without PSK stays without PSK after regen" {
+    # Regression guard: regen of a PSK-less client must NOT introduce a PSK.
+    require_flock
+    mock_awg
+    create_server_config
+    create_init_config
+    mkdir -p "$KEYS_DIR"
+    echo "SERVER_PRIV" > "$AWG_DIR/server_private.key"
+    echo "SERVER_PUB"  > "$AWG_DIR/server_public.key"
+    echo "CLIENT_PRIV_XYZ" > "$KEYS_DIR/plain.private"
+    echo "CLIENT_PUB_XYZ"  > "$KEYS_DIR/plain.public"
+    cat >> "$SERVER_CONF_FILE" <<'EOF'
+
+[Peer]
+#_Name = plain
+PublicKey = CLIENT_PUB_XYZ
+AllowedIPs = 10.9.9.6/32
+EOF
+    cat > "$AWG_DIR/plain.conf" <<'EOF'
+[Interface]
+PrivateKey = CLIENT_PRIV_XYZ
+Address = 10.9.9.6/32
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = SERVER_PUB
+Endpoint = 203.0.113.1:39743
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 33
+EOF
+    unset CLIENT_PSK
+    # shellcheck disable=SC2317
+    get_server_public_ip() { echo "203.0.113.1"; return 0; }
+    export -f get_server_public_ip
+
+    run regenerate_client "plain"
+    [ "$status" -eq 0 ]
+    run grep -c '^PresharedKey' "$AWG_DIR/plain.conf"
+    [ "$output" = "0" ]
+}

@@ -1218,11 +1218,24 @@ regenerate_client() {
         [[ -n "$_v" ]] && current_keepalive="$_v"
         _v=$(sed -n '/^\[Peer\]/,$ s/^AllowedIPs[ \t]*=[ \t]*//p' "$AWG_DIR/${name}.conf" | tr -d '[:space:]')
         [[ -n "$_v" ]] && current_allowed_ips="$_v"
+        # v5.11.1: preserve PresharedKey through regen. Without this,
+        # clients added with `manage add --psk` would lose their PSK on
+        # regen — the server peer still holds the PSK but the client
+        # conf would drop it, breaking the handshake. CLIENT_PSK is
+        # passed through to render_client_config.
+        local _psk
+        _psk=$(sed -n '/^\[Peer\]/,$ s/^PresharedKey[ \t]*=[ \t]*//p' "$AWG_DIR/${name}.conf" | tr -d '[:space:]')
+        if [[ -n "$_psk" ]]; then
+            export CLIENT_PSK="$_psk"
+        else
+            unset CLIENT_PSK
+        fi
     fi
 
     # Config regeneration
     render_client_config "$name" "$client_ip" "$client_privkey" "$server_pubkey" "$endpoint" "${AWG_PORT}" || {
         exec {lock_fd}>&-
+        unset CLIENT_PSK
         return 1
     }
 
@@ -1256,6 +1269,9 @@ regenerate_client() {
 
     # vpn:// URI for Amnezia Client
     generate_vpn_uri "$name"
+
+    # Hygiene: do not let PSK leak into later operations in the same shell
+    unset CLIENT_PSK
 
     log "Client config for '$name' regenerated."
     return 0
