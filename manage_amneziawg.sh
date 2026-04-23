@@ -65,6 +65,7 @@ while [[ $# -gt 0 ]]; do
         --conf-dir=*)      AWG_DIR="${1#*=}"; shift ;;
         --server-conf=*)   SERVER_CONF_FILE="${1#*=}"; shift ;;
         --apply-mode=*)    _CLI_APPLY_MODE="${1#*=}"; export AWG_APPLY_MODE="$_CLI_APPLY_MODE"; shift ;;
+        --psk)             CLI_ADD_PSK=1; shift ;;
         --*)               echo "Неизвестная опция: $1" >&2; COMMAND="help"; break ;;
         *)
             if [[ -z "$COMMAND" ]]; then
@@ -1095,6 +1096,7 @@ usage() {
     echo "  --conf-dir=ПУТЬ       Указать директорию AWG (умолч: $AWG_DIR)"
     echo "  --server-conf=ПУТЬ    Указать файл конфига сервера"
     echo "  --apply-mode=РЕЖИМ    syncconf (умолч.) или restart (обход kernel panic)"
+    echo "  --psk                 (только для add) сгенерировать PresharedKey для клиента"
     echo ""
     echo "Команды:"
     echo "  add <имя> [имя2 ...]        Добавить клиента(ов). --expires применяется ко всем"
@@ -1131,6 +1133,15 @@ case $COMMAND in
     add)
         [[ ${#ARGS[@]} -eq 0 ]] && die "Не указано имя клиента."
 
+        # --psk: включить опциональный PresharedKey для каждого нового клиента.
+        # Export CLIENT_PSK="auto" → generate_client сам сгенерирует 32-байт
+        # PSK через `awg genpsk` для каждого client'а в batch (разный PSK
+        # на каждого).
+        if [[ "${CLI_ADD_PSK:-0}" == "1" ]]; then
+            export CLIENT_PSK="auto"
+            log "PresharedKey будет сгенерирован для каждого нового клиента (--psk)."
+        fi
+
         _added=0
         for _cname in "${ARGS[@]}"; do
             validate_client_name "$_cname" || { _cmd_rc=1; continue; }
@@ -1138,6 +1149,12 @@ case $COMMAND in
             if grep -qxF "#_Name = ${_cname}" "$SERVER_CONF_FILE"; then
                 log_warn "Клиент '$_cname' уже существует, пропуск."
                 continue
+            fi
+
+            # В batch-режиме каждому клиенту — свой PSK: сбрасываем на "auto"
+            # чтобы generate_client сгенерировал новый.
+            if [[ "${CLI_ADD_PSK:-0}" == "1" ]]; then
+                export CLIENT_PSK="auto"
             fi
 
             log "Добавление '$_cname'..."

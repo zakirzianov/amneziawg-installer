@@ -76,6 +76,24 @@ get_server_public_ip() {
     return 1
 }
 
+# Fallback: первый non-loopback IPv4 с сетевого интерфейса.
+# Нужен когда curl до ifconfig.me / ipify / ... не проходит (LXC без egress,
+# fail2ban на outbound, firewall, и т.п.). На bare metal / обычных VPS
+# обычно совпадает с public IP; на NAT'нутом хосте даёт private IP — в
+# этом случае вызывающий код должен написать log_warn чтобы пользователь
+# сам исправил Endpoint в клиентских .conf.
+_try_local_ip() {
+    local ip
+    ip=$(ip -4 -o addr show scope global 2>/dev/null \
+        | awk '{print $4}' \
+        | cut -d/ -f1 \
+        | grep -v '^127\.' \
+        | head -1)
+    [[ -n "$ip" && "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+    echo "$ip"
+    return 0
+}
+
 # Note: apt_update_tolerant() определена inline в install_amneziawg.sh
 # (нужна в шагах 1-2 до скачивания этого файла). Здесь её нет — мёртвый код.
 
@@ -403,6 +421,51 @@ generate_server_keys() {
     return 0
 }
 
+# Гарантирует наличие $AWG_DIR/server_public.key.
+# Если файла нет — пытается восстановить его из PrivateKey в awg0.conf
+# (полезно для ручных установок вне нашего installer, где кеш серверного
+# pubkey не создаётся на шаге 6). Возвращает 0 если ключ уже есть или
+# успешно восстановлен, 1 если ни того ни другого.
+_ensure_server_public_key() {
+    [[ -f "$AWG_DIR/server_public.key" ]] && return 0
+
+    [[ -f "$SERVER_CONF_FILE" ]] || {
+        log_error "Не могу восстановить server_public.key — отсутствует $SERVER_CONF_FILE"
+        return 1
+    }
+    local _srv_priv
+    _srv_priv=$(awk '
+        /^\[Interface\]/ {in_iface=1; next}
+        in_iface && /^PrivateKey[ \t]*=/ {
+            sub(/^PrivateKey[ \t]*=[ \t]*/, "")
+            gsub(/[[:space:]]/, "")
+            print
+            exit
+        }
+        /^\[/ && !/^\[Interface\]/ {in_iface=0}
+    ' "$SERVER_CONF_FILE")
+    if [[ -z "$_srv_priv" ]]; then
+        log_error "Не найден PrivateKey в $SERVER_CONF_FILE — восстановить server_public.key невозможно"
+        return 1
+    fi
+    mkdir -p "$AWG_DIR"
+    local _tmp
+    _tmp=$(awg_mktemp) || return 1
+    if ! echo "$_srv_priv" | awg pubkey > "$_tmp"; then
+        rm -f "$_tmp"
+        log_error "Не удалось вычислить публичный ключ через awg pubkey"
+        return 1
+    fi
+    if ! mv -f "$_tmp" "$AWG_DIR/server_public.key"; then
+        rm -f "$_tmp"
+        log_error "Ошибка перемещения в $AWG_DIR/server_public.key"
+        return 1
+    fi
+    chmod 600 "$AWG_DIR/server_public.key" 2>/dev/null || true
+    log "server_public.key восстановлен из awg0.conf PrivateKey."
+    return 0
+}
+
 # ==============================================================================
 # Рендеринг конфигураций
 # ==============================================================================
@@ -534,6 +597,14 @@ EOF
 
 [Peer]
 PublicKey = ${server_pubkey}
+EOF
+    # PresharedKey — опциональный дополнительный слой поверх AWG 2.0
+    # обфускации (включается через `manage add --psk`). Должен совпадать
+    # в server peer и client [Peer].
+    if [[ -n "${CLIENT_PSK:-}" ]]; then
+        echo "PresharedKey = ${CLIENT_PSK}" >> "$tmpfile"
+    fi
+    cat >> "$tmpfile" << EOF
 Endpoint = ${endpoint}:${port}
 AllowedIPs = ${allowed_ips}
 PersistentKeepalive = 33
@@ -683,8 +754,13 @@ add_peer_to_server() {
 [Peer]
 #_Name = ${name}
 PublicKey = ${pubkey}
-AllowedIPs = ${client_ip}/32
 EOF
+    # PresharedKey — опционально, пишется если передан через CLIENT_PSK env.
+    # Должен совпадать у server peer и client [Peer].
+    if [[ -n "${CLIENT_PSK:-}" ]]; then
+        echo "PresharedKey = ${CLIENT_PSK}" >> "$tmpfile"
+    fi
+    echo "AllowedIPs = ${client_ip}/32" >> "$tmpfile"
 
     if ! mv "$tmpfile" "$SERVER_CONF_FILE"; then
         rm -f "$tmpfile"
@@ -836,6 +912,7 @@ generate_vpn_uri() {
     local client_privkey client_ip server_pubkey endpoint allowed_ips
     client_privkey=$(grep -oP 'PrivateKey\s*=\s*\K\S+' "$conf_file") || return 1
     client_ip=$(grep -oP 'Address\s*=\s*\K[0-9./]+' "$conf_file") || return 1
+    _ensure_server_public_key || return 1
     server_pubkey=$(cat "$AWG_DIR/server_public.key" 2>/dev/null) || return 1
     local raw_endpoint
     raw_endpoint=$(grep -oP 'Endpoint\s*=\s*\K\S+' "$conf_file") || return 1
@@ -927,6 +1004,13 @@ generate_vpn_uri() {
 # Полный цикл создания клиента:
 # keypair → next IP → client config → add peer → QR
 # generate_client <name> [endpoint]
+#
+# Env var contract:
+#   CLIENT_PSK — необязательный. Если установлен в "auto", генерирует
+#     свежий PSK через `awg genpsk` и прописывает его и в серверный
+#     [Peer], и в клиентский [Peer]. Если установлен в конкретное
+#     значение (32-байт base64) — использует его без генерации. Если
+#     пуст/не установлен — PSK не добавляется (default behaviour).
 generate_client() {
     local name="$1"
     local endpoint="${2:-}"
@@ -938,6 +1022,15 @@ generate_client() {
 
     # Загружаем параметры
     load_awg_params || return 1
+
+    # Опциональный PresharedKey: "auto" → `awg genpsk`, иначе используем
+    # переданное значение как есть. Пустое/unset → без PSK.
+    if [[ "${CLIENT_PSK:-}" == "auto" ]]; then
+        CLIENT_PSK=$(awg genpsk) || {
+            log_warn "awg genpsk не сработал — клиент будет создан без PresharedKey"
+            CLIENT_PSK=""
+        }
+    fi
 
     # Межпроцессная блокировка: атомарность IP-аллокации + добавления пира
     local lockfile="${AWG_DIR}/.awg_config.lock"
@@ -961,19 +1054,23 @@ generate_client() {
     client_privkey=$(cat "$KEYS_DIR/${name}.private") || { exec {lock_fd}>&-; return 1; }
     client_pubkey=$(cat "$KEYS_DIR/${name}.public") || { exec {lock_fd}>&-; return 1; }
 
-    if [[ ! -f "$AWG_DIR/server_public.key" ]]; then
-        log_error "Публичный ключ сервера не найден"
-        exec {lock_fd}>&-
-        return 1
-    fi
+    # Пытаемся восстановить server_public.key из awg0.conf если кеша нет
+    # (поддержка ручных установок без installer-шага 6).
+    _ensure_server_public_key || { exec {lock_fd}>&-; return 1; }
     server_pubkey=$(cat "$AWG_DIR/server_public.key") || { exec {lock_fd}>&-; return 1; }
 
-    # Endpoint: из аргумента, из конфига или автоопределение
+    # Endpoint: из аргумента → AWG_ENDPOINT (awgsetup_cfg.init) → curl до
+    # внешних сервисов → локальный IP с сетевого интерфейса.
+    # Последний fallback для LXC / сред без egress: может быть NAT-адресом,
+    # поэтому предупреждаем пользователя в лог.
     if [[ -z "$endpoint" ]]; then
         endpoint="${AWG_ENDPOINT:-}"
     fi
     if [[ -z "$endpoint" ]]; then
         endpoint=$(get_server_public_ip)
+    fi
+    if [[ -z "$endpoint" ]]; then
+        endpoint=$(_try_local_ip) && log_warn "Используется локальный IP сервера как Endpoint ('$endpoint') — curl до внешних сервисов не прошёл. Если сервер за NAT, поправьте Endpoint в клиентских .conf вручную."
     fi
     if [[ -z "$endpoint" ]]; then
         log_error "Не удалось определить внешний IP сервера. Используйте --endpoint=IP"
@@ -1088,18 +1185,23 @@ regenerate_client() {
         return 1
     fi
 
+    # Auto-gen из awg0.conf если кеша нет (ручная установка)
+    _ensure_server_public_key || { exec {lock_fd}>&-; return 1; }
     server_pubkey=$(cat "$AWG_DIR/server_public.key" 2>/dev/null) || {
         log_error "Публичный ключ сервера не найден"
         exec {lock_fd}>&-
         return 1
     }
 
-    # Endpoint
+    # Endpoint chain: arg → AWG_ENDPOINT → curl → local IP (best-effort).
     if [[ -z "$endpoint" ]]; then
         endpoint="${AWG_ENDPOINT:-}"
     fi
     if [[ -z "$endpoint" ]]; then
         endpoint=$(get_server_public_ip)
+    fi
+    if [[ -z "$endpoint" ]]; then
+        endpoint=$(_try_local_ip) && log_warn "Используется локальный IP сервера как Endpoint ('$endpoint') — curl до внешних сервисов не прошёл."
     fi
     if [[ -z "$endpoint" ]]; then
         log_error "Не удалось определить внешний IP сервера."
