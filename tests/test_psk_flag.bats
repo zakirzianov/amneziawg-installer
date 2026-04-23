@@ -15,9 +15,13 @@ mock_awg() {
     # shellcheck disable=SC2317
     awg() {
         case "$1" in
+            genkey)  echo "STUB_PRIVATE_KEY_32B_BASE64VAL==" ;;
             pubkey)  local _pk; _pk=$(cat); echo "pub_${_pk:0:20}" ;;
             genpsk)  echo "GENERATED_PSK_VALUE_32B==" ;;
-            *)       command awg "$@" ;;
+            set)     return 0 ;;
+            syncconf) return 0 ;;
+            show)    return 0 ;;
+            *)       command awg "$@" 2>/dev/null || return 0 ;;
         esac
     }
     export -f awg
