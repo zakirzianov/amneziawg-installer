@@ -14,6 +14,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.11.1] — 2026-04-23
+
+UX patch. Three small improvements for `manage` on manual (non-installer) setups — e.g. `amneziawg-go` userspace in LXC. Credit to [@Akh-commits](https://github.com/Akh-commits) for the detailed live-test in [Issue #51](https://github.com/bivlked/amneziawg-installer/issues/51) on 2026-04-22, which is where all three fixes came from.
+
+### Fixed / Added
+
+- **`manage add` and `regen` now work without the `server_public.key` cache.** A new `_ensure_server_public_key` helper computes the server public key from the `[Interface]` `PrivateKey` in `awg0.conf` via `awg pubkey` if `/root/awg/server_public.key` is missing (typical for installs made outside my installer — that cache is only populated there). The result is written atomically (tmp + mv) with mode 600. The awk extractor tolerates leading whitespace before `PrivateKey = ` (hand-edited configs).
+- **Endpoint fallback chain for egress-restricted setups.** Previously `manage add` inside LXC without access to external IP services died with "Failed to determine server public IP". Now, after `curl` to `ifconfig.me`/`ipify`/`icanhazip`/`ipinfo` fails, I try the first non-loopback IPv4 on a global-scope interface (`ip -4 -o addr show scope global`). The user gets a `log_warn` suggesting they hand-edit `Endpoint` in the client `.conf` if the server sits behind NAT.
+- **New `manage add --psk` flag.** Optionally enables `PresharedKey` in the client `.conf` and in the server `[Peer]`. Generates a 32-byte key via `awg genpsk` for every client in batch mode (distinct PSK per client). Off by default — AWG 2.0 obfuscation is sufficient in most scenarios, and PSK is an extra layer for the paranoid or for compatibility with classic WireGuard deployments. Documented in `ADVANCED.md` / `ADVANCED.en.md` manage CLI section.
+
+### Tests
+
+- **+19 new bats** (249 total, up from 230 on v5.11.0):
+  - `test_server_pubkey_autogen.bats` (+7) — no-op when cache exists, reconstruct from `awg0.conf`, edge cases (missing file, missing `PrivateKey`, ignore `PrivateKey` in `[Peer]` sections, indented `PrivateKey`, RU/EN parity).
+  - `test_endpoint_fallback.bats` (+5) — returns IPv4 on a global-scope interface, empty output when no global scope, skips loopback, picks first of many interfaces, RU/EN parity.
+  - `test_psk_flag.bats` (+7) — `PresharedKey` absent without flag, written when `CLIENT_PSK` is set, correct ordering inside `[Peer]` blocks, `CLIENT_PSK="auto"` resolution in `generate_client`, `--psk` parsing in RU+EN manage, help mention.
+
+### Breaking changes
+
+None. All three changes are additive — the existing install flow is unchanged, and without the `--psk` flag `manage add` behaves identically to v5.11.0.
+
+---
+
 ## [5.11.0] — 2026-04-22
 
 Robustness bundle — I closed a batch of scenarios where `install` or `manage` could leave the system in a half-configured state on failure: running `install` twice without reboot, a helpers download being interrupted, a kill during `restore`, a failed backup before a destructive `modify`, a race between concurrent `regen` calls. The CI ARM matrix now also ships prebuilt packages for Ubuntu 25.10 and Debian 13. Upgrading is recommended but not required — v5.10.2 remains working, no blocking bugs there.
