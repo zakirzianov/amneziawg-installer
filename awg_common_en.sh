@@ -436,8 +436,8 @@ _ensure_server_public_key() {
     local _srv_priv
     _srv_priv=$(awk '
         /^\[Interface\]/ {in_iface=1; next}
-        in_iface && /^PrivateKey[ \t]*=/ {
-            sub(/^PrivateKey[ \t]*=[ \t]*/, "")
+        in_iface && /^[ \t]*PrivateKey[ \t]*=/ {
+            sub(/^[ \t]*PrivateKey[ \t]*=[ \t]*/, "")
             gsub(/[[:space:]]/, "")
             print
             exit

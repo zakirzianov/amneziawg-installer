@@ -1191,6 +1191,8 @@ case $COMMAND in
                 _cmd_rc=1
             fi
         fi
+        # Hygiene: do not let CLIENT_PSK leak into later operations
+        unset CLIENT_PSK
         ;;
 
     remove)

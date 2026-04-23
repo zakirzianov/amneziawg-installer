@@ -1189,6 +1189,8 @@ case $COMMAND in
                 _cmd_rc=1
             fi
         fi
+        # Hygiene: CLIENT_PSK не должен протекать в будущие операции
+        unset CLIENT_PSK
         ;;
 
     remove)

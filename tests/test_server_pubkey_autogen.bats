@@ -106,6 +106,24 @@ EOF
     [ ! -f "$AWG_DIR/server_public.key" ]
 }
 
+@test "_ensure_server_public_key: handles indented PrivateKey (hand-edited config)" {
+    # User-edited configs may indent key/value lines. The awk extractor
+    # must tolerate leading whitespace.
+    setup_with_psk_stub
+    cat > "$SERVER_CONF_FILE" <<'EOF'
+[Interface]
+    PrivateKey = INDENTED_PRIVKEY_ABCDEFGHI
+    Address = 10.9.9.1/24
+EOF
+    rm -f "$AWG_DIR/server_public.key"
+
+    run _ensure_server_public_key
+    [ "$status" -eq 0 ]
+    # Stub returns "pub_${_pk:0:20}" — first 20 chars of "INDENTED_PRIVKEY_ABCDEFGHI"
+    # = "INDENTED_PRIVKEY_ABC" (stops before the D).
+    [ "$(cat "$AWG_DIR/server_public.key")" = "pub_INDENTED_PRIVKEY_ABC" ]
+}
+
 @test "_ensure_server_public_key: ignores PrivateKey in [Peer] sections" {
     # Only PrivateKey in [Interface] should be used. A rogue [Peer]
     # PrivateKey (which would never exist in a real awg0.conf) must
