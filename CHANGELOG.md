@@ -14,6 +14,29 @@
 
 ---
 
+## [5.11.1] — 2026-04-23
+
+UX-патч. Три небольших улучшения для `manage` на ручных (не-installer) установках — например, `amneziawg-go` userspace в LXC. Credit [@Akh-commits](https://github.com/Akh-commits) за детальный live-тест в [Issue #51](https://github.com/bivlked/amneziawg-installer/issues/51) 22 апр 2026, из которого вышли все три фикса.
+
+### Исправлено / Добавлено
+
+- **`manage add` и `regen` теперь работают без кеша `server_public.key`.** Новый helper `_ensure_server_public_key` вычисляет публичный ключ сервера из `PrivateKey` в `[Interface]` секции `awg0.conf` через `awg pubkey`, если `/root/awg/server_public.key` отсутствует (типичный случай для установок вне моего installer — там кеш не создаётся). Результат записывается атомарно (tmp + mv) с правами 600. Парсер awk терпим к пробельным отступам перед `PrivateKey = ` (hand-edited конфиги).
+- **Fallback-цепочка для `Endpoint` при отсутствии egress.** Раньше `manage add` в LXC без доступа к внешним IP-сервисам падал с «Не удалось определить внешний IP сервера». Теперь после неудачного `curl` до `ifconfig.me`/`ipify`/`icanhazip`/`ipinfo` пробуется локальный IPv4 с первого interface в глобальной scope (`ip -4 -o addr show scope global`). Пользователь получает `log_warn` с подсказкой поправить `Endpoint` в клиентских `.conf` вручную, если сервер за NAT.
+- **Новый флаг `manage add --psk`.** Опционально включает `PresharedKey` в клиентском `.conf` и в серверном `[Peer]`. Генерирует 32-байт ключ через `awg genpsk` для каждого клиента в batch-режиме (разный PSK на каждого). По умолчанию флаг выключен — AWG 2.0 обфускации достаточно для большинства сценариев, PSK — дополнительный слой для параноиков или совместимости с классическим WireGuard deployment'ом. Документация обновлена в `ADVANCED.md` / `ADVANCED.en.md` раздел `manage CLI`.
+
+### Тесты
+
+- **+19 новых bats** (249 total, было 230 на v5.11.0):
+  - `test_server_pubkey_autogen.bats` (+7) — no-op на существующем кеше, восстановление из `awg0.conf`, граничные случаи (отсутствие файла, отсутствие `PrivateKey`, ignored в `[Peer]` секциях, indented `PrivateKey`, RU/EN parity).
+  - `test_endpoint_fallback.bats` (+5) — возврат IPv4 с global-scope interface, пустой вывод без global-scope, пропуск loopback, выбор первого из нескольких interfaces, RU/EN parity.
+  - `test_psk_flag.bats` (+7) — отсутствие `PresharedKey` без флага, запись при установленном `CLIENT_PSK`, правильный порядок внутри `[Peer]` блоков, разрешение `CLIENT_PSK="auto"` в `generate_client`, парсинг `--psk` в manage RU+EN, help mention.
+
+### Breaking changes
+
+Нет. Все три изменения additive — existing install-flow не меняется, без флага `--psk` поведение `manage add` идентично v5.11.0.
+
+---
+
 ## [5.11.0] — 2026-04-22
 
 Robustness bundle — закрыта пачка сценариев, в которых `install` или `manage` мог оставить систему в полу-сконфигурированном состоянии при сбое: двойной запуск `install` без reboot, обрыв скачивания helpers, kill во время `restore`, failed backup перед destructive `modify`, гонка при параллельном `regen` клиентов. CI ARM matrix теперь покрывает Ubuntu 25.10 и Debian 13 prebuilt-пакетами. Обновление рекомендуется всем, но v5.10.2 остаётся рабочим — блокирующих багов в нём нет.
