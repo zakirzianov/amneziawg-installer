@@ -1248,16 +1248,19 @@ regenerate_client() {
     if ! sed -i "s/^DNS = .*/DNS = ${_dns}/" "$_client_conf"; then
         log_error "Ошибка sed при записи DNS в $_client_conf"
         exec {lock_fd}>&-
+        unset CLIENT_PSK
         return 1
     fi
     if ! sed -i "s/^PersistentKeepalive = .*/PersistentKeepalive = ${_ka}/" "$_client_conf"; then
         log_error "Ошибка sed при записи PersistentKeepalive в $_client_conf"
         exec {lock_fd}>&-
+        unset CLIENT_PSK
         return 1
     fi
     if ! sed -i "s|^AllowedIPs = .*|AllowedIPs = ${_aip}|" "$_client_conf"; then
         log_error "Ошибка sed при записи AllowedIPs в $_client_conf"
         exec {lock_fd}>&-
+        unset CLIENT_PSK
         return 1
     fi
 
