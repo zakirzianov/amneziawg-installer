@@ -858,22 +858,34 @@ sudo bash /root/awg/manage_amneziawg.sh add guest --expires=7d
 <a id="vpnuri-adv"></a>
 ## 📱 vpn:// URI Import
 
-When a client is created, a `.vpnuri` file is automatically generated with a `vpn://` URI for quick import into Amnezia Client.
+When a client is created, a `.vpnuri` file is automatically generated with a `vpn://` URI and, since v5.11.2, a QR code `<name>.vpnuri.png` encoding the same URI — for quick import into the Amnezia VPN app (Android / iOS / Desktop).
 
-**File location:** `/root/awg/<client_name>.vpnuri`
+**File locations:**
 
-**Format:** The configuration is compressed via zlib (Perl `Compress::Zlib`) and Base64-encoded, forming a URI like `vpn://...`.
+- `/root/awg/<client_name>.vpnuri` — plain-text `vpn://` URI
+- `/root/awg/<client_name>.vpnuri.png` — QR code of that URI (since v5.11.2)
 
-> Perl with `Compress::Zlib` and `MIME::Base64` modules must be present on the server. On Ubuntu and Debian they are installed by default. If Perl is absent, `.vpnuri` files are not created, but `.conf` files work as usual.
+**Format:** the configuration is compressed via zlib (Perl `Compress::Zlib`) and Base64-encoded, forming a URI like `vpn://...`.
 
-**Using with Amnezia Client:**
+> Perl with `Compress::Zlib` and `MIME::Base64` modules must be present on the server. On Ubuntu and Debian they are installed by default. If Perl is absent, neither `.vpnuri` nor `.vpnuri.png` is created, but `.conf` files work as usual. `qrencode` (already required for `.conf` QR) is also used for `.vpnuri.png`.
 
-1. Copy the contents of the `.vpnuri` file
-2. Open Amnezia Client
-3. "Add VPN" → "Paste from clipboard"
-4. The configuration is imported automatically
+**Option 1 — QR code (recommended for mobile):**
 
-**Permissions:** `.vpnuri` files have 600 permissions (root only).
+1. Copy `/root/awg/<name>.vpnuri.png` to your computer (`scp`) or open it locally.
+2. In the Amnezia VPN app on the phone: "Add VPN" → "Scan QR code".
+3. Point the camera at `.vpnuri.png` — the client imports automatically.
+
+**Option 2 — URI paste:**
+
+1. Copy the contents of the `.vpnuri` file.
+2. Open Amnezia VPN → "Add VPN" → "Paste from clipboard".
+3. The configuration is imported automatically.
+
+> Alongside sits `<name>.png` — the QR of `.conf` for classic WireGuard-compatible clients (AmneziaWG Windows, wireguard-apple, `wg-quick`). The two formats target different clients: Amnezia VPN app scans `.vpnuri.png`, WireGuard-compatible clients scan `<name>.png`. Do not mix them up.
+
+> For existing clients created before v5.11.2, `.vpnuri.png` appears after one `manage regen <name>`. New clients get both QR codes out of the box.
+
+**Permissions:** `.vpnuri` and `.vpnuri.png` have 600 permissions (root only).
 
 ---
 

@@ -8,14 +8,14 @@ fi
 # ==============================================================================
 # Скрипт для управления пользователями (пирами) AmneziaWG 2.0
 # Автор: @bivlked
-# Версия: 5.11.1
-# Дата: 2026-04-23
+# Версия: 5.11.2
+# Дата: 2026-04-24
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 
 # --- Безопасный режим и Константы ---
 # shellcheck disable=SC2034
-SCRIPT_VERSION="5.11.1"
+SCRIPT_VERSION="5.11.2"
 set -o pipefail
 AWG_DIR="/root/awg"
 SERVER_CONF_FILE="/etc/amnezia/amneziawg/awg0.conf"
@@ -745,7 +745,11 @@ modify_client() {
 
     log "Перегенерация QR-кода и vpn:// URI..."
     generate_qr "$name" || log_warn "Не удалось обновить QR-код."
-    generate_vpn_uri "$name" || log_warn "Не удалось обновить vpn:// URI."
+    if generate_vpn_uri "$name"; then
+        generate_qr_vpnuri "$name" || log_warn "Не удалось обновить QR vpn://."
+    else
+        log_warn "Не удалось обновить vpn:// URI."
+    fi
 
     exec {modify_lock_fd}>&-
     return 0
@@ -1222,7 +1226,8 @@ case $COMMAND in
             for _rname in "${_valid_names[@]}"; do
                 log "Удаление '$_rname'..."
                 if remove_peer_from_server "$_rname"; then
-                    rm -f "$AWG_DIR/$_rname.conf" "$AWG_DIR/$_rname.png" "$AWG_DIR/$_rname.vpnuri"
+                    rm -f "$AWG_DIR/$_rname.conf" "$AWG_DIR/$_rname.png" \
+                        "$AWG_DIR/$_rname.vpnuri" "$AWG_DIR/$_rname.vpnuri.png"
                     rm -f "$KEYS_DIR/${_rname}.private" "$KEYS_DIR/${_rname}.public"
                     remove_client_expiry "$_rname"
                     log "Клиент '$_rname' удалён."

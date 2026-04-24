@@ -3,8 +3,8 @@
 # ==============================================================================
 # Shared function library for AmneziaWG 2.0
 # Author: @bivlked
-# Version: 5.11.1
-# Date: 2026-04-23
+# Version: 5.11.2
+# Date: 2026-04-24
 # Repository: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 #
@@ -1001,6 +1001,45 @@ generate_vpn_uri() {
     return 0
 }
 
+# Generate QR code from vpn:// URI (for one-tap import into Amnezia VPN app Android/iOS/Desktop)
+# generate_qr_vpnuri <name>
+#
+# Writes via a temp file in the same directory + atomic mv so that on
+# qrencode or chmod failure the user never sees a truncated `.vpnuri.png`:
+# the previous version stays intact and the new one only appears whole.
+generate_qr_vpnuri() {
+    local name="$1"
+    local uri_file="$AWG_DIR/${name}.vpnuri"
+    local png_file="$AWG_DIR/${name}.vpnuri.png"
+    local tmp_png="${png_file}.tmp.$$"
+
+    if [[ ! -f "$uri_file" ]]; then
+        log_error "vpn:// URI for '$name' not found: $uri_file"
+        return 1
+    fi
+
+    if ! command -v qrencode &>/dev/null; then
+        log_warn "qrencode is not installed, vpn:// QR not created for '$name'."
+        return 1
+    fi
+
+    if ! qrencode -t png -o "$tmp_png" < "$uri_file"; then
+        log_error "Failed to generate vpn:// QR for '$name'"
+        rm -f "$tmp_png"
+        return 1
+    fi
+
+    if ! chmod 600 "$tmp_png"; then
+        log_error "Failed to chmod 600 $tmp_png"
+        rm -f "$tmp_png"
+        return 1
+    fi
+
+    mv -f "$tmp_png" "$png_file"
+    log_debug "vpn:// QR for '$name' created: $png_file"
+    return 0
+}
+
 # Full client creation cycle:
 # keypair -> next IP -> client config -> add peer -> QR
 # generate_client <name> [endpoint]
@@ -1101,9 +1140,12 @@ generate_client() {
         log_warn "QR code not created. Config: $AWG_DIR/${name}.conf"
     fi
 
-    # vpn:// URI for Amnezia Client (optional)
+    # vpn:// URI and QR for Amnezia VPN app (optional).
+    # QR vpn:// is attempted only if URI was generated successfully — no source otherwise.
     if ! generate_vpn_uri "$name"; then
         log_warn "vpn:// URI not created for '$name'."
+    elif ! generate_qr_vpnuri "$name"; then
+        log_warn "vpn:// QR not created for '$name'."
     fi
 
     log "Client '$name' created (IP: $client_ip)."
@@ -1119,12 +1161,17 @@ generate_client() {
 # previously sed failures were silently ignored.
 #
 # Lock scope: held only while mutating $AWG_DIR/${name}.conf.
-# generate_qr / generate_vpn_uri are called OUTSIDE the lock as
-# best-effort derived artifacts — if a concurrent modify changes the
-# conf between our sed and QR generation, the QR may be stale by one
-# tick. Acceptable: the client gets an up-to-date QR on the next
-# operation. Including QR/URI in the lock is more expensive (holding
-# the lock for several seconds) with no server-state integrity gain.
+# generate_qr / generate_vpn_uri / generate_qr_vpnuri are called OUTSIDE
+# the lock as best-effort derived artifacts — if a concurrent modify
+# changes the conf between our sed and QR generation, the QR may be
+# stale by one tick. A concurrent `manage remove <name>` may also delete
+# the client after we release the lock, and regen will "resurrect"
+# `.conf` / `.png` / `.vpnuri` / `.vpnuri.png` for an already-removed
+# peer (stale artefacts in $AWG_DIR). Acceptable: the user gets correct
+# state on the next operation (repeat `remove` or `regen`), and the
+# peer is already out of the server config — no traffic flows through
+# it. Including QR/URI in the lock is more expensive (holding the lock
+# for several seconds) with no server-state integrity gain.
 regenerate_client() {
     local name="$1"
     local endpoint="${2:-}"
@@ -1270,8 +1317,13 @@ regenerate_client() {
     # QR code
     generate_qr "$name"
 
-    # vpn:// URI for Amnezia Client
-    generate_vpn_uri "$name"
+    # vpn:// URI and QR for Amnezia VPN app (best-effort).
+    # QR vpn:// is attempted only if URI was regenerated successfully.
+    if generate_vpn_uri "$name"; then
+        generate_qr_vpnuri "$name" || log_warn "vpn:// QR not updated for '$name'."
+    else
+        log_warn "vpn:// URI not updated for '$name'."
+    fi
 
     # Hygiene: do not let PSK leak into later operations in the same shell
     unset CLIENT_PSK
