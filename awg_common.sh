@@ -3,8 +3,8 @@
 # ==============================================================================
 # Общая библиотека функций для AmneziaWG 2.0
 # Автор: @bivlked
-# Версия: 5.11.1
-# Дата: 2026-04-23
+# Версия: 5.11.2
+# Дата: 2026-04-24
 # Репозиторий: https://github.com/bivlked/amneziawg-installer
 # ==============================================================================
 #
@@ -1001,6 +1001,45 @@ generate_vpn_uri() {
     return 0
 }
 
+# Генерация QR-кода из vpn:// URI (для импорта в Amnezia VPN app Android/iOS/Desktop)
+# generate_qr_vpnuri <name>
+#
+# Пишет через tmp в той же директории + atomic mv, чтобы при сбое qrencode
+# или chmod пользователь никогда не увидел обрезанный `.vpnuri.png`:
+# старая версия файла остаётся на месте, новая появляется только целиком.
+generate_qr_vpnuri() {
+    local name="$1"
+    local uri_file="$AWG_DIR/${name}.vpnuri"
+    local png_file="$AWG_DIR/${name}.vpnuri.png"
+    local tmp_png="${png_file}.tmp.$$"
+
+    if [[ ! -f "$uri_file" ]]; then
+        log_error "vpn:// URI для '$name' не найден: $uri_file"
+        return 1
+    fi
+
+    if ! command -v qrencode &>/dev/null; then
+        log_warn "qrencode не установлен, QR vpn:// не создан для '$name'."
+        return 1
+    fi
+
+    if ! qrencode -t png -o "$tmp_png" < "$uri_file"; then
+        log_error "Ошибка генерации QR vpn:// для '$name'"
+        rm -f "$tmp_png"
+        return 1
+    fi
+
+    if ! chmod 600 "$tmp_png"; then
+        log_error "Не удалось выставить права 600 на $tmp_png"
+        rm -f "$tmp_png"
+        return 1
+    fi
+
+    mv -f "$tmp_png" "$png_file"
+    log_debug "QR vpn:// для '$name' создан: $png_file"
+    return 0
+}
+
 # Полный цикл создания клиента:
 # keypair → next IP → client config → add peer → QR
 # generate_client <name> [endpoint]
@@ -1102,9 +1141,12 @@ generate_client() {
         log_warn "QR-код не создан. Конфиг: $AWG_DIR/${name}.conf"
     fi
 
-    # vpn:// URI для Amnezia Client (необязательный)
+    # vpn:// URI и QR для Amnezia VPN app (необязательные).
+    # QR vpn:// пробуем только если URI создан успешно — иначе читать нечего.
     if ! generate_vpn_uri "$name"; then
         log_warn "vpn:// URI не создан для '$name'."
+    elif ! generate_qr_vpnuri "$name"; then
+        log_warn "QR vpn:// не создан для '$name'."
     fi
 
     log "Клиент '$name' создан (IP: $client_ip)."
@@ -1120,12 +1162,17 @@ generate_client() {
 # настроек — прежде молча игнорировались ошибки sed.
 #
 # Lock scope: держится только пока мутируется $AWG_DIR/${name}.conf.
-# generate_qr / generate_vpn_uri вызываются ВНЕ lock как best-effort
-# derived artifacts — если между sed-ом и QR-генерацией concurrent
-# modify успеет изменить conf, QR может устареть на один такт. Это
-# приемлемо: клиент получит актуальный QR на следующей операции.
-# Включать QR/URI в lock дороже (lock на несколько секунд — модифицирует
-# не только этот клиент), без выигрыша по целостности server-state.
+# generate_qr / generate_vpn_uri / generate_qr_vpnuri вызываются ВНЕ lock
+# как best-effort derived artifacts — если между sed-ом и QR-генерацией
+# concurrent modify успеет изменить conf, QR может устареть на один такт.
+# Также concurrent `manage remove <name>` может удалить клиента после
+# release lock, и regen «воскресит» `.conf` / `.png` / `.vpnuri` /
+# `.vpnuri.png` для уже удалённого peer-а (stale artefacts в $AWG_DIR).
+# Это приемлемо: пользователь получит актуальное состояние на следующей
+# операции (повторный `remove` или `regen`), и peer уже удалён из server-
+# конфига — трафик через него не идёт. Включать QR/URI в lock дороже
+# (lock на несколько секунд — блокирует другие клиенты) без выигрыша
+# по целостности server-state.
 regenerate_client() {
     local name="$1"
     local endpoint="${2:-}"
@@ -1270,8 +1317,13 @@ regenerate_client() {
     # QR-код
     generate_qr "$name"
 
-    # vpn:// URI для Amnezia Client
-    generate_vpn_uri "$name"
+    # vpn:// URI и QR для Amnezia VPN app (best-effort).
+    # QR vpn:// пробуем только если URI пересоздан успешно.
+    if generate_vpn_uri "$name"; then
+        generate_qr_vpnuri "$name" || log_warn "QR vpn:// не обновлён для '$name'."
+    else
+        log_warn "vpn:// URI не обновлён для '$name'."
+    fi
 
     # Hygiene: PSK не должен протекать в следующие операции в том же shell
     unset CLIENT_PSK

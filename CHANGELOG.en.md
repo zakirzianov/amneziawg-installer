@@ -14,6 +14,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [5.11.2] — 2026-04-24
+
+UX patch on top of v5.11.1. A second per-client QR code — rendered from the `vpn://` URI — for one-tap import into the flagship Amnezia VPN app (Android / iOS / Desktop). The existing `<name>.png` (scan of `.conf`) is unchanged and keeps working with WireGuard-compatible clients (AmneziaWG Windows, `wireguard-apple`, `wg-quick`).
+
+### Added
+
+- **New `generate_qr_vpnuri` helper** in `awg_common.sh` / `awg_common_en.sh`. It reads `/root/awg/<name>.vpnuri` (the URI that `generate_vpn_uri` has been producing for a while now — full Amnezia envelope: zlib-JSON with `containers/defaultContainer/hostName/dns/mtu/protocol_version=2` plus all AWG 2.0 params), pipes it into `qrencode -t png`, writes `/root/awg/<name>.vpnuri.png` with mode 600. Writes are atomic: first into `<name>.vpnuri.png.tmp.$$` in the same directory, `chmod 600`, then `mv -f` to the target path — if `qrencode` or `chmod` fails, the old file stays intact and the orphan `.tmp.*` is cleaned up.
+- **Hooked into `generate_client` and `regenerate_client`.** After a successful `generate_vpn_uri`, `generate_qr_vpnuri` runs. If the URI itself cannot be built (missing perl modules, params not loaded), the vpn:// QR is silently skipped. The wg-quick QR and vpn:// QR are independent best-effort artifacts — a failure in one does not prevent the other.
+- **Hooked into `manage regen` and `manage remove`.** `regen` now refreshes both QR codes (conf and vpn://) together. `remove` cleans up `<name>.vpnuri.png` alongside `<name>.conf` / `.png` / `.vpnuri` and keys.
+- **Backup / restore picks up `.vpnuri.png` automatically** — no new code paths needed: the existing `*.png` glob in `_backup_configs_nolock` and `chmod 600 *.png` in `restore_backup` already cover the new artifact.
+
+### Why
+
+The flagship Amnezia VPN app (Android / iOS / Desktop) supports one-tap import by scanning a QR that encodes `vpn://{base64url(zlib(json))}`. I have been generating that URI for a while, but only as a plain text `.vpnuri` file that users had to copy over manually. Now you can point the phone camera at the second QR code instead of copying a file. The first QR (from `.conf`) remains the right one for classic WireGuard clients.
+
+### Tests
+
+- **+10 new bats** (261 total, up from 251 on v5.11.1):
+  - `test_qr_vpnuri.bats` (+10) — happy path (stdin → PNG), missing `.vpnuri` → error, `qrencode` non-zero exit → error, **atomic write** (pre-existing `.vpnuri.png` is preserved on failure, no orphan `.tmp.*` left behind), `chmod 600` on Linux/Darwin, RU/EN structural parity of the helper (qrencode call + `.vpnuri.png` target + `command -v` guard), hooks in `generate_client` / `regenerate_client` / manage regen / cleanup in manage remove.
+
+### Breaking changes
+
+None. Existing client `.conf` / `.png` / `.vpnuri` files keep working. The new `.vpnuri.png` is only generated for clients created or regenerated on v5.11.2 — for older clients, a single `manage regen <name>` is enough. Downgrading to v5.11.1 is safe (stale `.vpnuri.png` files just sit in `/root/awg/` and are ignored).
+
+### Dependencies
+
+No new ones: `qrencode` was already in the installer step-2 required list (used by `generate_qr` for `.conf`), and `perl` + `Compress::Zlib` + `MIME::Base64` — already for `generate_vpn_uri`.
+
+---
+
 ## [5.11.1] — 2026-04-23
 
 UX patch. Three small improvements for `manage` on manual (non-installer) setups — e.g. `amneziawg-go` userspace in LXC. Credit to [@Akh-commits](https://github.com/Akh-commits) for the detailed live-test in [Issue #51](https://github.com/bivlked/amneziawg-installer/issues/51) on 2026-04-22, which is where all three fixes came from.
