@@ -16,31 +16,42 @@
 
 ## [5.11.3] — 2026-04-28
 
-UX-патч поверх v5.11.2: чистка интерактивных команд под скрипты/cron, защита от collision при rapid-fire бэкапах, и расширение FAQ — ответы на свежие вопросы из issues/discussions, без архитектурных изменений.
+**v5.11.3** — UX-релиз AmneziaWG 2.0 VPN-инсталлятора: пять улучшений по горячим следам issues и discussions, без архитектурных изменений. Поддержка Ubuntu 24.04 / 25.10, Debian 12 / 13, x86_64 + ARM (Raspberry Pi, Oracle Ampere, Hetzner CAX) — без изменений.
 
-### Добавлено
+### Главное
 
-- **CLI-флаг `--yes` для `manage_amneziawg.sh` (RU+EN)** и эквивалентная переменная окружения `AWG_YES=1` пропускают любой confirm-prompt — в `remove`, `restore` и `restart`. Полезно для cron, Ansible и одноразовых интерактивных вызовов где подтверждение уже сделано заранее. Дефолтное поведение не меняется — без флага и без env confirm работает как раньше.
-- **Миллисекундная точность в имени файла бэкапа** — `awg_backup_2026-04-28_15-53-50.123.tar.gz` (`date +%F_%H-%M-%S.%3N` в `_backup_configs_nolock`). Решает collision в сценарии «два backup'а в одну секунду» (например, regen → backup → modify → backup) — раньше второй tar перезаписывал первый. Backwards-compat: старые бэкапы без `.NNN` суффикса по-прежнему находятся `find`-паттерном и корректно сортируются.
-- **FAQ: ICMP внутри туннеля (RU+EN, ADVANCED.md)** — почему `ping` сервер↔клиенты не идёт после `default deny incoming`, как открыть `awg0` в UFW, как поправить пользовательскую правку `before.rules` через `-i <iface>`. Discussion [#63](https://github.com/bivlked/amneziawg-installer/discussions/63) (@PavelVVrn). Явное предупреждение: `ufw allow ... proto icmp` не работает (UFW не поддерживает `icmp` через флаг `proto`).
-- **Карта операторов оператор → I1 расширена.** Tele2 (Красноярск) обновлён: помимо `Jc=3` нужно удалить строку `I1` целиком (AWG 1.0 fallback, без CPS-маскировки). Добавлена строка Megafon (регионы) — тоже `I1=отсутствует`. Под таблицей пояснение зачем и как: `systemctl restart awg-quick@awg0` на сервере + `manage regen <имя>` на каждого клиента. Issue [#42](https://github.com/bivlked/amneziawg-installer/issues/42) (@alkorrnd).
-- **`--psk` highlight в README.md/.en.md** — пример в Краткой справке (`add my_iphone --psk`) + новый FAQ entry «Не подключается Shadowrocket на iOS/macOS — нужен PresharedKey» с пошаговой инструкцией для новых и существующих клиентов. Раньше фича была документирована только в ADVANCED — Issue [#62](https://github.com/bivlked/amneziawg-installer/issues/62) (@andreykorobko) показал что не discoverable.
+- 🍎 **Shadowrocket на iOS / macOS теперь подключается из коробки.** Флаг `--psk` для `manage add` появился ещё в v5.11.1, но не был виден в README — теперь он в Краткой справке + отдельный FAQ entry. ([#62](https://github.com/bivlked/amneziawg-installer/issues/62), @andreykorobko)
+- 📡 **Ping внутри туннеля сервер ↔ клиенты** — пошаговый рецепт через UFW + `/etc/ufw/before.rules` в FAQ. С явным предупреждением: `ufw allow ... proto icmp` **не работает** (UFW поддерживает через флаг `proto` только `tcp/udp/esp/ah/gre/ipv6`). ([#63](https://github.com/bivlked/amneziawg-installer/discussions/63), @PavelVVrn)
+- 🌐 **Карта мобильных операторов → I1 расширена.** Megafon (регионы) и Tele2 (Красноярск) обновлены до `I1=отсутствует` — AWG 1.0 fallback для операторов, где сами CPS-пакеты триггерят DPI-блок. Под таблицей — точные команды (`systemctl restart awg-quick@awg0` + `manage regen <имя>`). ([#42](https://github.com/bivlked/amneziawg-installer/issues/42), @alkorrnd)
+- 🤖 **Авто-скрипты для cron / Ansible / Proxmox.** `manage --yes` (флаг) или `AWG_YES=1` (env) пропускают confirm-prompt в `remove`, `restore`, `restart`. Дефолтное поведение не меняется (opt-in).
+- 🗂️ **Бэкапы без коллизий.** Миллисекундный суффикс в имени файла (`awg_backup_2026-04-28_15-53-50.123.tar.gz`) защищает от перезаписи при двух backup'ах в одну секунду (например, `regen → backup → modify → backup`). Старые имена (без `.NNN`) работают как раньше.
+
+### Установка
+
+```bash
+wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.11.3/install_amneziawg.sh
+chmod +x install_amneziawg.sh
+sudo bash ./install_amneziawg.sh
+```
+
+3 команды → ~20 минут → готовый VPN-сервер с обфускацией трафика. Подробнее — [README → Установка](README.md#ustanovka).
+
+### Обновление существующего сервера
+
+Запустите `install_amneziawg.sh` свежей версии — на 5-м шаге `manage_amneziawg.sh` и `awg_common.sh` обновятся автоматически (с проверкой SHA256). Полные команды — [ADVANCED.md → Как обновить скрипты](ADVANCED.md#-как-обновить-скрипты).
 
 ### Тесты
 
 **+34 новых bats** (295 total, было 261 на v5.11.2):
 
-- `test_yes_flag.bats` (+11) — извлечение `confirm_action` из manage-скриптов, изоляция логики CLI_YES / AWG_YES путей; non-`"1"` значения AWG_YES (`"yes"`, `"true"`, `"0"`) точно не матчат bypass-ветку при принудительно interactive режиме; CLI parser принимает `--yes`; usage help содержит `--yes` + `AWG_YES=1`; structural parity RU/EN.
-- `test_backup_collision.bats` (+8) — `date +%3N` даёт distinct значения при rapid-fire; `find` pattern матчит и legacy, и ms-suffix имена; `sort -r` правильно сортирует при mixed format; RU/EN parity.
-- `test_v5113_docs.bats` (+15) — invariants для Phase 3+4+5 docs: ICMP entry в обоих языках, oper-table row count parity, README cheat sheet содержит `--psk` пример, FAQ Shadowrocket entry в обоих языках, RU README ссылается строго на `ADVANCED.md#manage-cli-adv`, EN README — на `ADVANCED.en.md#manage-cli-adv` (защита от cross-language link drift), anchor `manage-cli-adv` достижим.
+- `test_yes_flag.bats` (+11) — изоляция `confirm_action` через `awk` + `eval`. Проверяется, что non-`"1"` значения `AWG_YES` (`"yes"`, `"true"`, `"0"`) **не** матчат bypass-ветку под принудительно интерактивным режимом.
+- `test_backup_collision.bats` (+8) — `date +%3N` даёт distinct значения при rapid-fire вызовах; `find` pattern и `sort -r` корректно обрабатывают и legacy-имена, и новые ms-suffix в одной директории.
+- `test_v5113_docs.bats` (+15) — инварианты для FAQ ICMP, таблицы операторов, `--psk` highlight; защита от RU/EN cross-link drift в README → ADVANCED.
 
-### Совместимость
+### Совместимость и зависимости
 
-Полностью обратно-совместимо. `--yes` opt-in, по умолчанию ничего не меняется. Backup ms-suffix рассчитан на сосуществование со старыми именами файлов. Откат на v5.11.2 безопасен.
-
-### Зависимости
-
-Новых нет. `date +%3N` (миллисекунды) — стандартный GNU coreutils, есть в Ubuntu/Debian из коробки.
+- **Полностью обратно-совместимо.** `--yes` opt-in, дефолтное поведение не меняется. Backup ms-suffix рассчитан на сосуществование с легаси-именами. Откат на v5.11.2 безопасен.
+- **Новых зависимостей нет.** `date +%3N` (миллисекунды) — стандартный GNU coreutils, есть в Ubuntu/Debian из коробки.
 
 ---
 

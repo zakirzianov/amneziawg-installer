@@ -16,31 +16,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [5.11.3] — 2026-04-28
 
-UX patch on top of v5.11.2: cleanups for interactive commands so they behave well under scripts/cron, collision protection on rapid-fire backups, and FAQ extensions that answer recent questions from issues/discussions — no architectural changes.
+**v5.11.3** is a UX release for the AmneziaWG 2.0 VPN installer: five improvements driven by recent issues and discussions, no architectural changes. Ubuntu 24.04 / 25.10, Debian 12 / 13, x86_64 + ARM (Raspberry Pi, Oracle Ampere, Hetzner CAX) — supported as before.
 
-### Added
+### Highlights
 
-- **CLI flag `--yes` for `manage_amneziawg.sh` (RU+EN)** and the equivalent `AWG_YES=1` environment variable skip every confirm prompt — in `remove`, `restore`, and `restart`. Useful for cron, Ansible, and one-off interactive calls that already pre-confirmed. Default behaviour is unchanged — without the flag and without the env var, confirm still works the same way.
-- **Millisecond precision in backup filenames** — `awg_backup_2026-04-28_15-53-50.123.tar.gz` (`date +%F_%H-%M-%S.%3N` in `_backup_configs_nolock`). Resolves the collision in the "two backups within the same second" scenario (e.g. regen → backup → modify → backup) — previously the second tar overwrote the first. Backwards-compat: legacy backups without the `.NNN` suffix still match the `find` pattern and sort correctly.
-- **FAQ: ICMP inside the tunnel (RU+EN, ADVANCED.md)** — why `ping` server↔clients does not flow after `default deny incoming`, how to open `awg0` in UFW, how to fix a user-edited `before.rules` via `-i <iface>`. Discussion [#63](https://github.com/bivlked/amneziawg-installer/discussions/63) (@PavelVVrn). Explicit warning: `ufw allow ... proto icmp` does not work (UFW does not support `icmp` via the `proto` flag).
-- **Carrier → I1 map extended.** Tele2 (Krasnoyarsk) updated: in addition to `Jc=3` the `I1` line must be removed entirely (AWG 1.0 fallback, no CPS masking). New row Megafon (regions) — also `I1=absent`. Below the table — explainer with the exact commands: `systemctl restart awg-quick@awg0` on the server + `manage regen <name>` for every client. Issue [#42](https://github.com/bivlked/amneziawg-installer/issues/42) (@alkorrnd).
-- **`--psk` highlight in README.md/.en.md** — example in the Quick Reference (`add my_iphone --psk`) + a new FAQ entry "Shadowrocket on iOS/macOS does not connect — needs PresharedKey" with step-by-step instructions for new and existing clients. Previously the feature was documented only in ADVANCED — Issue [#62](https://github.com/bivlked/amneziawg-installer/issues/62) (@andreykorobko) showed it was not discoverable.
+- 🍎 **Shadowrocket on iOS / macOS now connects out of the box.** The `--psk` flag for `manage add` shipped in v5.11.1 but was not visible in the README — it is now in the Quick Reference and has its own FAQ entry. ([#62](https://github.com/bivlked/amneziawg-installer/issues/62), @andreykorobko)
+- 📡 **Ping inside the tunnel — server ↔ clients** — a step-by-step recipe for UFW + `/etc/ufw/before.rules` in the FAQ. Explicit warning: `ufw allow ... proto icmp` does **not** work (UFW only supports `tcp/udp/esp/ah/gre/ipv6` via the `proto` flag). ([#63](https://github.com/bivlked/amneziawg-installer/discussions/63), @PavelVVrn)
+- 🌐 **Mobile carrier → I1 map extended.** Megafon (regions) and Tele2 (Krasnoyarsk) updated to `I1=absent` — the AWG 1.0 fallback for carriers where CPS packets themselves trigger DPI blocks. Exact commands below the table (`systemctl restart awg-quick@awg0` + `manage regen <name>`). ([#42](https://github.com/bivlked/amneziawg-installer/issues/42), @alkorrnd)
+- 🤖 **Auto-scripts for cron / Ansible / Proxmox.** `manage --yes` (flag) or `AWG_YES=1` (env) skip the confirm prompt in `remove`, `restore`, `restart`. Default behavior is unchanged (opt-in).
+- 🗂️ **Backups without collisions.** Millisecond suffix in filenames (`awg_backup_2026-04-28_15-53-50.123.tar.gz`) protects against overwrite when two backups land in the same second (e.g., `regen → backup → modify → backup`). Legacy filenames (no `.NNN`) keep working.
+
+### Install
+
+```bash
+wget https://raw.githubusercontent.com/bivlked/amneziawg-installer/v5.11.3/install_amneziawg_en.sh
+chmod +x install_amneziawg_en.sh
+sudo bash ./install_amneziawg_en.sh
+```
+
+3 commands → ~20 minutes → a working VPN server with traffic obfuscation. More — [README.en.md → Installation](README.en.md#installation).
+
+### Upgrading an existing server
+
+Re-run the latest `install_amneziawg_en.sh` — step 5 refreshes `manage_amneziawg.sh` and `awg_common.sh` automatically (with SHA256 verification). Full commands — [ADVANCED.en.md → How to Update Scripts](ADVANCED.en.md#-how-to-update-scripts).
 
 ### Tests
 
 **+34 new bats** (295 total, up from 261 on v5.11.2):
 
-- `test_yes_flag.bats` (+11) — extract `confirm_action` from manage scripts, exercise CLI_YES / AWG_YES branches in isolation; non-`"1"` values of AWG_YES (`"yes"`, `"true"`, `"0"`) are explicitly proven NOT to match the bypass branch under forced-interactive mode; CLI parser accepts `--yes`; usage help mentions `--yes` + `AWG_YES=1`; RU/EN structural parity.
-- `test_backup_collision.bats` (+8) — `date +%3N` produces distinct values under rapid fire; `find` pattern matches both legacy and ms-suffix names; `sort -r` orders correctly in mixed-format directories; RU/EN parity.
-- `test_v5113_docs.bats` (+15) — Phase 3+4+5 docs invariants: ICMP entry present in both languages, oper-table row count parity, README cheat sheet contains the `--psk` example, FAQ Shadowrocket entry present in both languages, RU README strictly links to `ADVANCED.md#manage-cli-adv`, EN README to `ADVANCED.en.md#manage-cli-adv` (cross-language link-drift guard), anchor `manage-cli-adv` resolvable.
+- `test_yes_flag.bats` (+11) — extract `confirm_action` via `awk` + `eval`. Verifies that non-`"1"` values of `AWG_YES` (`"yes"`, `"true"`, `"0"`) do **not** match the bypass branch under forced-interactive mode.
+- `test_backup_collision.bats` (+8) — `date +%3N` produces distinct values under rapid fire; `find` pattern and `sort -r` correctly handle both legacy and ms-suffix names in the same directory.
+- `test_v5113_docs.bats` (+15) — invariants for the ICMP FAQ, the carrier table, the `--psk` highlight; protection against RU/EN cross-link drift in README → ADVANCED.
 
-### Compatibility
+### Compatibility and dependencies
 
-Fully backwards-compatible. `--yes` is opt-in, default behaviour unchanged. Backup ms-suffix is designed to coexist with legacy filenames. Downgrading to v5.11.2 is safe.
-
-### Dependencies
-
-No new ones. `date +%3N` (milliseconds) — standard GNU coreutils, available out of the box on Ubuntu/Debian.
+- **Fully backwards-compatible.** `--yes` is opt-in, default behavior unchanged. Backup ms-suffix is designed to coexist with legacy filenames. Downgrading to v5.11.2 is safe.
+- **No new dependencies.** `date +%3N` (milliseconds) is part of standard GNU coreutils, available out of the box on Ubuntu/Debian.
 
 ---
 
