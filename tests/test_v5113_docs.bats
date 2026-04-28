@@ -34,6 +34,15 @@
     [ "$ru" = "$en" ]
 }
 
+@test "Phase 3: ICMP FAQ covers split-tunneling AllowedIPs gotcha (D#63 follow-up)" {
+    # If user customized AllowedIPs on the client, the tunnel subnet must be
+    # in the list — otherwise even server-direct ping fails.
+    run grep -F 'split tunneling' "$BATS_TEST_DIRNAME/../ADVANCED.md"
+    [ "$status" -eq 0 ]
+    run grep -F 'split tunneling' "$BATS_TEST_DIRNAME/../ADVANCED.en.md"
+    [ "$status" -eq 0 ]
+}
+
 # ---------- Phase 4 ----------
 
 @test "Phase 4: oper-I1 table includes Megafon regions row in both languages" {

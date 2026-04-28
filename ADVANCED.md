@@ -709,6 +709,8 @@ sudo ufw reload</pre>
   <br><br>
   <b>Проверка:</b> с клиента <code>ping &lt;IP_сервера_в_туннеле&gt;</code>. С сервера на клиента (<code>ping &lt;IP_клиента&gt;</code>) может не отвечать сам клиент: на Windows и iOS встроенный фаервол часто режет echo-request — поэтому надёжнее проверять с клиента на сервер.
   <br><br>
+  <b>Если ты вручную правил <code>AllowedIPs</code> на клиенте под split tunneling</b> (через VPN идут только нужные подсети — например, только Telegram/Discord, а остальной трафик мимо), убедись что в списке есть <b>подсеть туннеля</b> (<code>10.9.9.0/24</code> или твоя кастомная). Без неё клиент не маршрутизирует в туннель даже пакеты к самому серверу — <code>ufw status verbose</code> и <code>iptables -L ufw-before-input -v -n</code> могут выглядеть правильно, а ping всё равно не идёт. При стандартном <code>AllowedIPs = 0.0.0.0/0</code> (как генерирует <code>manage add</code>) подсеть туннеля попадает автоматически.
+  <br><br>
   <b>Если нужен пинг между клиентами</b> (телефон ↔ роутер через сервер): <code>sudo ufw route allow in on awg0 out on awg0 &amp;&amp; sudo ufw reload</code>. <code>AllowedIPs</code> в клиентских <code>.conf</code> стандартно <code>0.0.0.0/0</code> — подсеть туннеля туда уже попадает. Discussion <a href="https://github.com/bivlked/amneziawg-installer/discussions/63">#63</a>.
 </details>
 

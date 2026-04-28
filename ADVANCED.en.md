@@ -711,6 +711,8 @@ sudo ufw reload</pre>
   <br><br>
   <b>Verify:</b> from the client <code>ping &lt;server_tunnel_IP&gt;</code>. From the server to a client (<code>ping &lt;client_IP&gt;</code>) the client itself may not reply: on Windows and iOS the built-in firewall often drops echo-request — testing client → server is the cleanest path.
   <br><br>
+  <b>If you manually customized <code>AllowedIPs</code> on the client for split tunneling</b> (only some subnets go through the VPN — e.g. only Telegram/Discord, everything else stays direct), make sure the <b>tunnel subnet</b> (<code>10.9.9.0/24</code> or your custom one) is in that list. Without it, the client does not route through the tunnel even packets destined for the server itself — <code>ufw status verbose</code> and <code>iptables -L ufw-before-input -v -n</code> can look correct, and ping still fails. With the default <code>AllowedIPs = 0.0.0.0/0</code> (what <code>manage add</code> generates) the tunnel subnet is included automatically.
+  <br><br>
   <b>For client-to-client ping</b> (phone ↔ router via the server): <code>sudo ufw route allow in on awg0 out on awg0 &amp;&amp; sudo ufw reload</code>. <code>AllowedIPs</code> in client <code>.conf</code> defaults to <code>0.0.0.0/0</code> — the tunnel subnet is already covered. Discussion <a href="https://github.com/bivlked/amneziawg-installer/discussions/63">#63</a>.
 </details>
 
