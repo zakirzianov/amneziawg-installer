@@ -519,6 +519,7 @@ For the changelog, see **[CHANGELOG.en.md](CHANGELOG.en.md)**.
 <details>
 <summary><strong>📰 Featured in</strong></summary>
 
+- [VPN Status (RU) — AmneziaWG services and server-side options catalog](https://vpnstatus.online/protocols/amneziawg)
 - [XDA Developers — «I found a self-hosted VPN that works where WireGuard gets blocked»](https://www.xda-developers.com/self-hosted-vpn-works-where-wireguard-gets-blocked/)
 - [Pinggy — Top 5 Best Self-Hosted VPNs in 2026](https://pinggy.io/blog/top_5_best_self_hosted_vpns/)
 - [gHacks Tech News — AmneziaWG 2.0](https://www.ghacks.net/2026/03/25/amnezia-releases-amneziawg-2-0-to-bypass-advanced-internet-censorship-systems/)
